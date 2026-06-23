@@ -30,10 +30,6 @@ A modern, extensible code editor built with PyQt5, featuring syntax highlighting
 
 <img src="./imgs/screenshot1.png">
 <img src="./imgs/screenshot2.png">
-<img src="./imgs/screenshot3.png">
-<img src="./imgs/screenshot4.png">
-<img src="./imgs/screenshot5.png">
-<img src="./imgs/screenshot6.png">
  
 ## Features
 
