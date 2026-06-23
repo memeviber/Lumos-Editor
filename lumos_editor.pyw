@@ -726,9 +726,27 @@ class MainWindow(QWidget):
         QTimer.singleShot(0, self.update_overlay_geometry)
         self.cmd_palette_shortcut = QShortcut(QKeySequence("Ctrl+Shift+P"), self)
         self.cmd_palette_shortcut.activated.connect(self.show_command_palette)
+        self.project_dir_changed.connect(self.sync_terminal_directory)
+
+        self.session_restored = False
         self._wait_plugins_timer = QTimer(self)
         self._wait_plugins_timer.timeout.connect(self._check_plugins_and_restore)
         self._wait_plugins_timer.start(50)
+
+
+    def _check_plugins_and_restore(self):
+        if getattr(self, "session_restored", False):
+            return
+        if getattr(self.plugin_manager, "plugins_loaded", True):
+            self.session_restored = True
+            self._wait_plugins_timer.stop()
+            self.restore_session()
+
+    def sync_terminal_directory(self, folder):
+        if folder and hasattr(self, "terminal_overlay") and self.terminal_overlay.is_running():
+            self.terminal_overlay.push(f'cd "{folder}"\r' + "clear\r"
+                    if sys.platform != "win32"
+                    else "cls\r")
 
     def _check_plugins_and_restore(self):
         if getattr(self.plugin_manager, "plugins_loaded", True):
@@ -756,7 +774,7 @@ class MainWindow(QWidget):
                     if sys.platform != "win32"
                     else "cls\r"
                 )
-            self.terminal_overlay.term.setFocus()
+            self.terminal_overlay.input_field.setFocus()
 
     def hide_integrated_terminal(self):
         if hasattr(self, "terminal_overlay"):
@@ -2595,7 +2613,6 @@ class MainWindow(QWidget):
 
 
 def main():
-    # Cấu hình chuẩn High DPI để hiển thị siêu sắc nét trên mọi loại màn hình (Standard & HiDPI)
     os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
     
     try:

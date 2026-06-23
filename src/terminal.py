@@ -364,8 +364,78 @@ class CommandInput(QLineEdit):
         self.history_index = len(self.history)
         self.current_draft = ""
 
+    def get_current_dir(self):
+        parent = self.parent()
+        while parent:
+            if hasattr(parent, "current_project_dir"):
+                return parent.current_project_dir
+            parent = parent.parent()
+        return os.path.expanduser("~")
+
     def keyPressEvent(self, event):
+        if event.key() == Qt.Key_Right:
+            text = self.text()
+
+            if not text:
+                return
+
+            if text.endswith(" "):
+                words = text.split()
+                last_word = ""
+            else:
+                words = text.split()
+                last_word = words[-1] if words else ""
+
+            base_dir = self.get_current_dir() or os.path.expanduser("~")
+            target_path = os.path.join(base_dir, last_word)
+
+            if os.path.isdir(target_path) and last_word.endswith(("/", "\\")):
+                search_dir = target_path
+                prefix = ""
+            else:
+                search_dir = os.path.dirname(target_path)
+                prefix = os.path.basename(target_path)
+
+            if os.path.isdir(search_dir):
+                try:
+                    items = sorted(os.listdir(search_dir))
+                except Exception:
+                    items = []
+            else:
+                items = []
+
+            matches = [
+                item for item in items if item.lower().startswith(prefix.lower())
+            ]
+
+            if matches:
+                best_match = matches[0]
+
+                rel_dir = os.path.dirname(last_word)
+
+                if rel_dir:
+                    completed_word = os.path.join(rel_dir, best_match).replace(
+                        "\\", "/"
+                    )
+                else:
+                    completed_word = best_match
+
+                if os.path.isdir(os.path.join(search_dir, best_match)):
+                    completed_word += "/"
+
+                if text.endswith(" "):
+                    self.setText(text + completed_word)
+                else:
+                    words[-1] = completed_word
+                    self.setText(" ".join(words))
+
+                self.setCursorPosition(len(self.text()))
+
+            event.accept()
+            return
+
         modifiers = event.modifiers()
+
         if modifiers == Qt.ControlModifier:
             if event.key() == Qt.Key_C and not self.hasSelectedText():
                 self.term.push("\x03")
@@ -376,22 +446,29 @@ class CommandInput(QLineEdit):
             elif event.key() == Qt.Key_L:
                 self.term.push("\x0c")
                 return
-        if modifiers == Qt.NoModifier or modifiers == Qt.KeypadModifier:
+
+        if modifiers in (Qt.NoModifier, Qt.KeypadModifier):
             if event.key() == Qt.Key_Up:
                 if self.history_index == len(self.history):
                     self.current_draft = self.text()
+
                 if self.history_index > 0:
                     self.history_index -= 1
                     self.setText(self.history[self.history_index])
+
                 return
+
             elif event.key() == Qt.Key_Down:
                 if self.history_index < len(self.history) - 1:
                     self.history_index += 1
                     self.setText(self.history[self.history_index])
+
                 elif self.history_index == len(self.history) - 1:
                     self.history_index += 1
                     self.setText(self.current_draft)
+
                 return
+
         super().keyPressEvent(event)
 
 

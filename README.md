@@ -240,6 +240,9 @@ Rename the final `.zip` file to have a `.lmp` extension (e.g., `my-plugin.lmp`).
 | `Ctrl+P` | Toggle Markdown Preview |
 | <code>Ctrl+`</code> | Toggle Integrated Terminal |
 
+> Tip:
+> Press the `right` key to auto-complete in the terminal.
+
 ### Tools
 
 | Shortcut | Action |
