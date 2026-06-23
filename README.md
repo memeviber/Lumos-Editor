@@ -10,7 +10,7 @@
     <a href="https://opensource.org/licenses/MIT">
         <img src="https://img.shields.io/badge/License-MIT-yellow.svg?style=flat&logo=open-source-initiative&logoColor=white" alt="License: MIT">
     </a>
-    <a href="https://github.com/memecoder12345678/lumos-editor/releases">
+    <a href="https://github.com/memeviber78/lumos-editor/releases">
         <img src="https://img.shields.io/badge/version-v1.5.0--beta-blue?style=flat&logo=semver&logoColor=white" alt="Version">
     </a>
     <a href="https://www.python.org/">
@@ -19,8 +19,8 @@
     <a href="https://riverbankcomputing.com/software/pyqt/">
         <img src="https://img.shields.io/badge/Built%20with-PyQt5-green?style=flat&logo=qt&logoColor=white" alt="Built with PyQt5">
     </a>
-    <a href="https://github.com/memecoder12345678/lumos-editor/stargazers">
-        <img src="https://img.shields.io/github/stars/memecoder12345678/lumos-editor?style=social" alt="GitHub Stars">
+    <a href="https://github.com/memeviber78/lumos-editor/stargazers">
+        <img src="https://img.shields.io/github/stars/memeviber78/lumos-editor?style=social" alt="GitHub Stars">
     </a>
 </p>
 
@@ -49,7 +49,7 @@ A modern, extensible code editor built with PyQt5, featuring syntax highlighting
 
 1.  **Clone this repository:**
     ```sh
-    git clone https://github.com/memecoder12345678/lumos-editor.git
+    git clone https://github.com/memeviber78/lumos-editor.git
     cd lumos-editor
     ```
 

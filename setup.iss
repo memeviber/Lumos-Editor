@@ -4,8 +4,8 @@
 
 #define MyAppName "Lumos Editor"
 #define MyAppVersion "1.5.0"
-#define MyAppPublisher "MemeCoder"
-#define MyAppURL "https://github.com/memecoder12345678/Lumos-Editor.git"
+#define MyAppPublisher "MemeViber"
+#define MyAppURL "https://github.com/memeviber78/Lumos-Editor.git"
 #define MyAppExeName "lumos_editor_v1.5.0_beta.exe"
 
 [Setup]

@@ -1,7 +1,7 @@
 {
     "name": "RunX",
     "version": "1.0.0",
-    "author": "MemeCoder",
+    "author": "MemeViber",
     "pluginType": "hook",
     "mainFile": "plugin.py"
 }
