@@ -1,0 +1,78 @@
+{
+    "theme": {
+        "name": "monokai",
+        "version": "1.5",
+        "paper-color": "#272822",
+        "margin-color": "#49483e",
+        "syntax": [
+            {
+                "default": {
+                    "color": "#f8f8f2"
+                }
+            },
+            {
+                "keyword": {
+                    "color": "#f92672"
+                }
+            },
+            {
+                "functions": {
+                    "color": "#66d9ef"
+                }
+            },
+            {
+                "classes": {
+                    "color": "#a6e22e"
+                }
+            },
+            {
+                "function_def": {
+                    "color": "#a6e22e",
+                    "font": {
+                        "family": "consolas",
+                        "font-size": 14,
+                        "font-weight": "normal",
+                        "italic": true
+                    }
+                }
+            },
+            {
+                "class_def": {
+                    "color": "#a6e22e",
+                    "font": {
+                        "family": "consolas",
+                        "font-size": 14,
+                        "font-weight": "normal",
+                        "italic": true
+                    }
+                }
+            },
+            {
+                "string": {
+                    "color": "#e6db74"
+                }
+            },
+            {
+                "types": {
+                    "color": "#66d9ef"
+                }
+            },
+            {
+                "comments": {
+                    "color": "#75715e",
+                    "font": {
+                        "family": "consolas",
+                        "font-size": 14,
+                        "font-weight": "normal",
+                        "italic": true
+                    }
+                }
+            },
+            {
+                "constants": {
+                    "color": "#ae81ff"
+                }
+            }
+        ]
+    }
+}

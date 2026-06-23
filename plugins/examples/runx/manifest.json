@@ -1,0 +1,7 @@
+{
+    "name": "RunX",
+    "version": "1.0.0",
+    "author": "MemeCoder",
+    "pluginType": "hook",
+    "mainFile": "plugin.py"
+}

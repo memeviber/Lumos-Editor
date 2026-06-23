@@ -1,0 +1,78 @@
+{
+    "theme": {
+        "name": "dracula",
+        "version": "1.0",
+        "paper-color": "#282a36",
+        "margin-color": "#44475a",
+        "syntax": [
+            {
+                "default": {
+                    "color": "#F8F8F2"
+                }
+            },
+            {
+                "keyword": {
+                    "color": "#FF79C6"
+                }
+            },
+            {
+                "functions": {
+                    "color": "#50FA7B"
+                }
+            },
+            {
+                "classes": {
+                    "color": "#50FA7B"
+                }
+            },
+            {
+                "function_def": {
+                    "color": "#50FA7B",
+                    "font": {
+                        "family": "consolas",
+                        "font-size": 14,
+                        "font-weight": "normal",
+                        "italic": true
+                    }
+                }
+            },
+            {
+                "class_def": {
+                    "color": "#50FA7B",
+                    "font": {
+                        "family": "consolas",
+                        "font-size": 14,
+                        "font-weight": "normal",
+                        "italic": true
+                    }
+                }
+            },
+            {
+                "string": {
+                    "color": "#BD93F9"
+                }
+            },
+            {
+                "types": {
+                    "color": "#8BE9FD"
+                }
+            },
+            {
+                "comments": {
+                    "color": "#6272A4",
+                    "font": {
+                        "family": "consolas",
+                        "font-size": 14,
+                        "font-weight": "normal",
+                        "italic": true
+                    }
+                }
+            },
+            {
+                "constants": {
+                    "color": "#FFB86C"
+                }
+            }
+        ]
+    }
+}

@@ -1,0 +1,89 @@
+{
+    "theme": {
+        "name": "monokai-pro",
+        "version": "2.0",
+        "paper-color": "#2D2A2E",
+        "margin-color": "#403E41",
+        "syntax": [
+            {
+                "default": {
+                    "color": "#FCFCFA"
+                }
+            },
+            {
+                "keyword": {
+                    "color": "#FF6188"
+                }
+            },
+            {
+                "functions": {
+                    "color": "#A9DC76"
+                }
+            },
+            {
+                "classes": {
+                    "color": "#78DCE8"
+                }
+            },
+            {
+                "function_def": {
+                    "color": "#A9DC76",
+                    "font": {
+                        "family": "consolas",
+                        "font-size": 14,
+                        "font-weight": "bold",
+                        "italic": false
+                    }
+                }
+            },
+            {
+                "class_def": {
+                    "color": "#78DCE8",
+                    "font": {
+                        "family": "consolas",
+                        "font-size": 14,
+                        "font-weight": "bold",
+                        "italic": false
+                    }
+                }
+            },
+            {
+                "string": {
+                    "color": "#FFD866"
+                }
+            },
+            {
+                "types": {
+                    "color": "#78DCE8",
+                    "font": {
+                        "family": "consolas",
+                        "font-size": 14,
+                        "font-weight": "normal",
+                        "italic": true
+                    }
+                }
+            },
+            {
+                "comments": {
+                    "color": "#727072",
+                    "font": {
+                        "family": "consolas",
+                        "font-size": 14,
+                        "font-weight": "normal",
+                        "italic": true
+                    }
+                }
+            },
+            {
+                "constants": {
+                    "color": "#AB9DF2"
+                }
+            },
+            {
+                "variables": {
+                    "color": "#FC9867"
+                }
+            }
+        ]
+    }
+}

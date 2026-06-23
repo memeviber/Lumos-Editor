@@ -1,0 +1,11 @@
+{
+    "name": "Zerionyx Language Support",
+    "version": "1.0.0",
+    "author": "MemeViber",
+    "description": "Cung cấp Syntax Highlighting và Auto-Complete thông minh cho ngôn ngữ Zerionyx.",
+    "pluginType": "both",
+    "fileExtensions": [".zyx", ".zex"],
+    "lexerClass": "ZerionyxLexer",
+    "lexerFile": "lexer.py",
+    "iconFile": "zyx-icon.ico"
+}

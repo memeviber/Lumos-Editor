@@ -1,0 +1,18 @@
+{
+    ".py": "{python} {filepath_q} {args}",
+    ".pyw": "{python} {filepath_q} {args}",
+    ".js": "node {filepath_q} {args}",
+    ".ts": "ts-node {filepath_q} {args}",
+    ".ps1": "powershell.exe -ExecutionPolicy Bypass -File {filepath_q} {args}",
+    ".bat": "{filepath_q} {args}",
+    ".cmd": "{filepath_q} {args}",
+    ".sh": "bash {filepath_q} {args}",
+    ".cpp": "g++ {filepath_q} -o {dirname_q}/{stem}.exe && {dirname_q}/{stem}.exe {args}",
+    ".c": "gcc {filepath_q} -o {dirname_q}/{stem}.exe && {dirname_q}/{stem}.exe {args}",
+    ".java": "javac {filepath_q} && java -cp {dirname_q} {stem} {args}",
+    ".go": "go run {filepath_q} {args}",
+    ".rs": "rustc {filepath_q} -o {dirname_q}/{stem} && {dirname_q}/{stem} {args}",
+    ".php": "php {filepath_q} {args}",
+    ".rb": "ruby {filepath_q} {args}",
+    ".html": ""
+}

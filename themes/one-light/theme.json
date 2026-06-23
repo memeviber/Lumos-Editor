@@ -1,0 +1,78 @@
+{
+    "theme": {
+        "name": "one-light",
+        "version": "1.0",
+        "paper-color": "#FAFAFA",
+        "margin-color": "#A0A1A7",
+        "syntax": [
+            {
+                "default": {
+                    "color": "#383A42"
+                }
+            },
+            {
+                "keyword": {
+                    "color": "#A626A4"
+                }
+            },
+            {
+                "functions": {
+                    "color": "#4078F2"
+                }
+            },
+            {
+                "classes": {
+                    "color": "#C18401"
+                }
+            },
+            {
+                "function_def": {
+                    "color": "#4078F2",
+                    "font": {
+                        "family": "consolas",
+                        "font-size": 14,
+                        "font-weight": "bold",
+                        "italic": false
+                    }
+                }
+            },
+            {
+                "class_def": {
+                    "color": "#C18401",
+                    "font": {
+                        "family": "consolas",
+                        "font-size": 14,
+                        "font-weight": "bold",
+                        "italic": false
+                    }
+                }
+            },
+            {
+                "string": {
+                    "color": "#50A14F"
+                }
+            },
+            {
+                "types": {
+                    "color": "#0184BC"
+                }
+            },
+            {
+                "comments": {
+                    "color": "#A0A1A7",
+                    "font": {
+                        "family": "consolas",
+                        "font-size": 14,
+                        "font-weight": "normal",
+                        "italic": true
+                    }
+                }
+            },
+            {
+                "constants": {
+                    "color": "#986801"
+                }
+            }
+        ]
+    }
+}

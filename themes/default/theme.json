@@ -1,0 +1,78 @@
+{
+    "theme": {
+        "name": "default",
+        "paper-color": "#111318",
+        "margin-color": "#6B7280",
+        "version": "1.0",
+        "syntax": [
+            {
+                "default": {
+                    "color": "#E6EAF2"
+                }
+            },
+            {
+                "keyword": {
+                    "color": "#C792EA"
+                }
+            },
+            {
+                "functions": {
+                    "color": "#82AAFF"
+                }
+            },
+            {
+                "classes": {
+                    "color": "#7EE787"
+                }
+            },
+            {
+                "function_def": {
+                    "color": "#82AAFF",
+                    "font": {
+                        "family": "consolas",
+                        "font-size": 14,
+                        "font-weight": "normal",
+                        "italic": false
+                    }
+                }
+            },
+            {
+                "class_def": {
+                    "color": "#7EE787",
+                    "font": {
+                        "family": "consolas",
+                        "font-size": 14,
+                        "font-weight": "normal",
+                        "italic": false
+                    }
+                }
+            },
+            {
+                "string": {
+                    "color": "#F2CC60"
+                }
+            },
+            {
+                "types": {
+                    "color": "#4DD4CE"
+                }
+            },
+            {
+                "comments": {
+                    "color": "#6B7280",
+                    "font": {
+                        "family": "consolas",
+                        "font-size": 14,
+                        "font-weight": "normal",
+                        "italic": true
+                    }
+                }
+            },
+            {
+                "constants": {
+                    "color": "#FF9E64"
+                }
+            }
+        ]
+    }
+}

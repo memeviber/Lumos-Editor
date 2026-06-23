@@ -1,0 +1,5 @@
+{
+  "name": "Hook Example",
+  "pluginType": "hook",
+  "mainFile": "plugin.py"
+}

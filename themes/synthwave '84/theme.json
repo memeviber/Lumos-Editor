@@ -1,0 +1,78 @@
+{
+    "theme": {
+        "name": "synthwave-84",
+        "version": "1.0",
+        "paper-color": "#262335",
+        "margin-color": "#8d8a9f",
+        "syntax": [
+            {
+                "default": {
+                    "color": "#ffffff"
+                }
+            },
+            {
+                "keyword": {
+                    "color": "#FEDE5D"
+                }
+            },
+            {
+                "functions": {
+                    "color": "#36F9F6"
+                }
+            },
+            {
+                "classes": {
+                    "color": "#FE4450"
+                }
+            },
+            {
+                "function_def": {
+                    "color": "#36F9F6",
+                    "font": {
+                        "family": "consolas",
+                        "font-size": 14,
+                        "font-weight": "normal",
+                        "italic": true
+                    }
+                }
+            },
+            {
+                "class_def": {
+                    "color": "#FE4450",
+                    "font": {
+                        "family": "consolas",
+                        "font-size": 14,
+                        "font-weight": "normal",
+                        "italic": true
+                    }
+                }
+            },
+            {
+                "string": {
+                    "color": "#FF8B39"
+                }
+            },
+            {
+                "types": {
+                    "color": "#FE4450"
+                }
+            },
+            {
+                "comments": {
+                    "color": "#848BBD",
+                    "font": {
+                        "family": "consolas",
+                        "font-size": 14,
+                        "font-weight": "normal",
+                        "italic": true
+                    }
+                }
+            },
+            {
+                "constants": {
+                    "color": "#F97E72"
+                }
+            }
+        ]
+    }
+}

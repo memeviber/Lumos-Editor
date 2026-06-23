@@ -1,0 +1,5 @@
+{
+  "name": "Count Words",
+  "pluginType": "hook",
+  "mainFile": "plugin.py"
+}
