@@ -1,5 +1,5 @@
 <p align="center">
-    <img src="./resources/lumos-icon.ico" alt="Lumos Editor Logo" width="150">
+    <img src="./resources/lumos-icon.png" alt="Lumos Editor Logo" width="150">
 </p>
 
 <h1 align="center">Lumos Editor</h1>
