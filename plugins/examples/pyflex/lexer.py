@@ -1,6 +1,8 @@
 import jedi
 import builtins
 import keyword
+import array
+from collections import OrderedDict
 
 TOK_NEWLINE = 0
 TOK_SPACE = 1
@@ -11,12 +13,14 @@ TOK_COMMENT = 5
 TOK_OPERATOR = 6
 TOK_TEXT = 7
 
-KEYWORDS = frozenset(keyword.kwlist)
+KEYWORDS_BYTES = frozenset(s.encode("utf-8") for s in keyword.kwlist)
+BUILTINS_BYTES = frozenset(
+    s.encode("utf-8") for s in dir(builtins) if not s.startswith("_")
+)
 
-BUILTINS = frozenset(name for name in dir(builtins) if not name.startswith("_"))
-
-TWO_OPS = frozenset(
-    {
+TWO_OPS_BYTES = frozenset(
+    op.encode("utf-8")
+    for op in [
         "==",
         "!=",
         "<=",
@@ -35,19 +39,38 @@ TWO_OPS = frozenset(
         "^=",
         "<<",
         ">>",
-    }
+    ]
 )
+
+IDENT_CHARS = bytearray(256)
+for _c in b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_":
+    IDENT_CHARS[_c] = 1
+
+NUM_CHARS = bytearray(256)
+for _c in b"0123456789_.":
+    NUM_CHARS[_c] = 1
+
+SPACE_CHARS = bytearray(256)
+SPACE_CHARS[32] = 1
+SPACE_CHARS[9] = 1
+
+QUOTE_DOUBLE3 = b'"""'
+QUOTE_SINGLE3 = b"'''"
 
 STATE_NORMAL = 0
 STATE_MULTILINE_DOUBLE = 1
 STATE_MULTILINE_SINGLE = 2
 
+EXPECT_NONE = 0
+EXPECT_CLASS = 1
+EXPECT_DEF = 2
+
 
 class PyFlex(lumos.BaseLexer):  # type: ignore
     def __init__(self, editor, theme_name="default"):
         super().__init__("Python", editor, theme_name=theme_name)
-
-        self.line_cache = {}
+        self.line_cache = OrderedDict()
+        self.CACHE_MAX_SIZE = 2048
 
     def _do_style_text(self, start: int, end: int):
         editor = self.editor
@@ -80,9 +103,6 @@ class PyFlex(lumos.BaseLexer):  # type: ignore
         CLASSES = self.CLASSES
         CONSTANTS = self.CONSTANTS
 
-        if len(self.line_cache) > 50000:
-            self.line_cache.clear()
-
         while pos < end or pos < doc_len:
             line_len = editor.SendScintilla(editor.SCI_LINELENGTH, current_line)
             if line_len == 0:
@@ -92,103 +112,110 @@ class PyFlex(lumos.BaseLexer):  # type: ignore
             line_bytes = text_str.encode("utf-8")
             actual_len = len(line_bytes)
 
-            cache_key = (line_bytes, current_state)
-            cached = self.line_cache.get(cache_key)
+            h_val = hash(line_bytes)
+            cache_key = (h_val, actual_len, current_state)
 
+            cached = self.line_cache.get(cache_key)
             old_line_state = editor.SendScintilla(editor.SCI_GETLINESTATE, current_line)
 
             if cached is not None:
+                self.line_cache.move_to_end(cache_key)
                 runs, new_state = cached
-                for length, style in runs:
-                    setStyling(length, style)
+
+                idx = 0
+                r_len = len(runs)
+                while idx < r_len:
+                    setStyling(runs[idx], runs[idx + 1])
+                    idx += 2
                 current_state = new_state
 
             else:
-                runs = []
+                runs = array.array("i")
+                runs_append = runs.append
+
                 i = 0
                 n = actual_len
-                expect_class_name = False
-                expect_def_name = False
+                expect_state = EXPECT_NONE
 
                 while i < n:
                     if current_state == STATE_MULTILINE_DOUBLE:
-                        j = i
-                        found = False
-                        while j < n:
-                            if (
-                                j + 2 < n
-                                and line_bytes[j] == 34
-                                and line_bytes[j + 1] == 34
-                                and line_bytes[j + 2] == 34
-                            ):
+                        j = line_bytes.find(QUOTE_DOUBLE3, i)
+                        if j == -1:
+                            runs_append(n - i)
+                            runs_append(STRING)
+                            i = n
+                        else:
+                            bs = 0
+                            k = j - 1
+                            while k >= i and line_bytes[k] == 92:
+                                bs += 1
+                                k -= 1
+                            if bs % 2 == 0:
                                 j += 3
-                                found = True
-                                break
-                            if line_bytes[j] == 92:
-                                j += 2
-                                if j > n:
-                                    j = n
+                                runs_append(j - i)
+                                runs_append(STRING)
+                                current_state = STATE_NORMAL
+                                i = j
                             else:
-                                j += 1
-
-                        runs.append((j - i, STRING))
-                        if found:
-                            current_state = STATE_NORMAL
-                        i = j
+                                j += 3
+                                runs_append(j - i)
+                                runs_append(STRING)
+                                i = j
                         continue
 
                     elif current_state == STATE_MULTILINE_SINGLE:
-                        j = i
-                        found = False
-                        while j < n:
-                            if (
-                                j + 2 < n
-                                and line_bytes[j] == 39
-                                and line_bytes[j + 1] == 39
-                                and line_bytes[j + 2] == 39
-                            ):
+                        j = line_bytes.find(QUOTE_SINGLE3, i)
+                        if j == -1:
+                            runs_append(n - i)
+                            runs_append(STRING)
+                            i = n
+                        else:
+                            bs = 0
+                            k = j - 1
+                            while k >= i and line_bytes[k] == 92:
+                                bs += 1
+                                k -= 1
+                            if bs % 2 == 0:
                                 j += 3
-                                found = True
-                                break
-                            if line_bytes[j] == 92:
-                                j += 2
-                                if j > n:
-                                    j = n
+                                runs_append(j - i)
+                                runs_append(STRING)
+                                current_state = STATE_NORMAL
+                                i = j
                             else:
-                                j += 1
-
-                        runs.append((j - i, STRING))
-                        if found:
-                            current_state = STATE_NORMAL
-                        i = j
+                                j += 3
+                                runs_append(j - i)
+                                runs_append(STRING)
+                                i = j
                         continue
 
                     c = line_bytes[i]
 
-                    if c == 32 or c == 9:
+                    if SPACE_CHARS[c]:
                         j = i + 1
-                        while j < n and (line_bytes[j] == 32 or line_bytes[j] == 9):
+                        while j < n and SPACE_CHARS[line_bytes[j]]:
                             j += 1
-                        runs.append((j - i, DEFAULT))
+                        runs_append(j - i)
+                        runs_append(DEFAULT)
                         i = j
 
                     elif c == 10 or c == 13:
                         j = i + 1
                         if c == 13 and j < n and line_bytes[j] == 10:
                             j += 1
-                        runs.append((j - i, DEFAULT))
+                        runs_append(j - i)
+                        runs_append(DEFAULT)
                         i = j
 
-                    elif c == 35:
-                        j = i + 1
-                        while j < n and line_bytes[j] not in (10, 13):
-                            j += 1
-                        runs.append((j - i, COMMENTS))
+                    elif c == 35:  # '#'
+                        j = line_bytes.find(b"\n", i)
+                        if j == -1:
+                            j = n
+                        runs_append(j - i)
+                        runs_append(COMMENTS)
                         i = j
-                        expect_class_name = False
-                        expect_def_name = False
+                        expect_state = EXPECT_NONE
 
-                    elif c == 34 or c == 39:
+                    elif c == 34 or c == 39:  # '"' or "'"
                         if (
                             i + 2 < n
                             and line_bytes[i + 1] == c
@@ -199,138 +226,120 @@ class PyFlex(lumos.BaseLexer):  # type: ignore
                                 if c == 34
                                 else STATE_MULTILINE_SINGLE
                             )
-                            runs.append((3, STRING))
+                            runs_append(3)
+                            runs_append(STRING)
                             i += 3
                         else:
-                            quote = c
                             j = i + 1
-                            while j < n:
-                                if line_bytes[j] == 92:
-                                    j += 2
-                                    if j > n:
-                                        j = n
-                                    continue
-                                if line_bytes[j] == quote:
+                            while True:
+                                j = line_bytes.find(c, j)
+                                if j == -1:
+                                    j = n
+                                    break
+                                bs = 0
+                                k = j - 1
+                                while k >= i and line_bytes[k] == 92:
+                                    bs += 1
+                                    k -= 1
+                                if bs % 2 == 0:
                                     j += 1
                                     break
-                                if line_bytes[j] in (10, 13):
-                                    break
                                 j += 1
-                            runs.append((j - i, STRING))
+
+                            runs_append(j - i)
+                            runs_append(STRING)
                             i = j
-                        expect_class_name = False
-                        expect_def_name = False
+                        expect_state = EXPECT_NONE
 
-                    elif c == 95 or (65 <= c <= 90) or (97 <= c <= 122):
+                    elif IDENT_CHARS[c] and not (48 <= c <= 57):
                         j = i + 1
-                        while j < n:
-                            oc = line_bytes[j]
-                            if (
-                                oc == 95
-                                or (65 <= oc <= 90)
-                                or (97 <= oc <= 122)
-                                or (48 <= oc <= 57)
-                            ):
-                                j += 1
-                            else:
-                                break
+                        while j < n and IDENT_CHARS[line_bytes[j]]:
+                            j += 1
 
-                        tok_str = line_bytes[i:j].decode("utf-8", errors="ignore")
+                        tok = line_bytes[i:j]
                         style_to_apply = DEFAULT
 
-                        if expect_class_name:
+                        if expect_state == EXPECT_CLASS:
                             style_to_apply = CLASSES
-                            expect_class_name = False
-                        elif expect_def_name:
+                            expect_state = EXPECT_NONE
+                        elif expect_state == EXPECT_DEF:
                             style_to_apply = FUNCTION_DEF
-                            expect_def_name = False
-                        elif tok_str == "class":
+                            expect_state = EXPECT_NONE
+                        elif tok == b"class":
                             style_to_apply = KEYWORD
-                            expect_class_name = True
-                        elif tok_str == "def":
+                            expect_state = EXPECT_CLASS
+                        elif tok == b"def":
                             style_to_apply = KEYWORD
-                            expect_def_name = True
-                        elif tok_str == "self":
+                            expect_state = EXPECT_DEF
+                        elif tok == b"self":
                             style_to_apply = KEYWORD
-                        elif tok_str in KEYWORDS:
+                        elif tok in KEYWORDS_BYTES:
                             style_to_apply = KEYWORD
-                        elif tok_str in BUILTINS:
+                        elif tok in BUILTINS_BYTES:
                             style_to_apply = FUNCTIONS
                         else:
-                            is_func_call = False
                             k = j
-                            while k < n and (line_bytes[k] == 32 or line_bytes[k] == 9):
+                            while k < n and SPACE_CHARS[line_bytes[k]]:
                                 k += 1
-                            if k < n and line_bytes[k] == 40:
-                                is_func_call = True
-                            if is_func_call:
+                            if k < n and line_bytes[k] == 40:  # '('
                                 style_to_apply = FUNCTIONS
 
-                        runs.append((j - i, style_to_apply))
+                        runs_append(j - i)
+                        runs_append(style_to_apply)
                         i = j
 
-                    elif 48 <= c <= 57:
+                    elif NUM_CHARS[c]:
                         j = i + 1
-                        while j < n:
-                            oc = line_bytes[j]
-                            if (48 <= oc <= 57) or oc == 46 or oc == 95:
-                                j += 1
-                            else:
-                                break
-                        runs.append((j - i, CONSTANTS))
-                        i = j
-                        expect_class_name = False
-                        expect_def_name = False
-
-                    elif c == 64:
-                        j = i + 1
-                        while j < n and (line_bytes[j] == 32 or line_bytes[j] == 9):
+                        while j < n and NUM_CHARS[line_bytes[j]]:
                             j += 1
-                        if j < n and (
-                            line_bytes[j] == 95
-                            or (65 <= line_bytes[j] <= 90)
-                            or (97 <= line_bytes[j] <= 122)
+                        runs_append(j - i)
+                        runs_append(CONSTANTS)
+                        i = j
+                        expect_state = EXPECT_NONE
+
+                    elif c == 64:  # '@'
+                        j = i + 1
+                        while j < n and SPACE_CHARS[line_bytes[j]]:
+                            j += 1
+                        if (
+                            j < n
+                            and IDENT_CHARS[line_bytes[j]]
+                            and not (48 <= line_bytes[j] <= 57)
                         ):
                             k = j + 1
-                            while k < n:
-                                oc = line_bytes[k]
-                                if (
-                                    oc == 95
-                                    or (65 <= oc <= 90)
-                                    or (97 <= oc <= 122)
-                                    or (48 <= oc <= 57)
-                                ):
-                                    k += 1
-                                else:
-                                    break
-                            runs.append((k - i, FUNCTIONS))
+                            while k < n and IDENT_CHARS[line_bytes[k]]:
+                                k += 1
+                            runs_append(k - i)
+                            runs_append(FUNCTIONS)
                             i = k
                         else:
-                            runs.append((1, DEFAULT))
+                            runs_append(1)
+                            runs_append(DEFAULT)
                             i += 1
-                        expect_class_name = False
-                        expect_def_name = False
+                        expect_state = EXPECT_NONE
 
                     else:
                         if i + 1 < n:
-                            two_op_str = line_bytes[i : i + 2].decode(
-                                "utf-8", errors="ignore"
-                            )
-                            if two_op_str in TWO_OPS:
-                                runs.append((2, DEFAULT))
+                            if line_bytes[i : i + 2] in TWO_OPS_BYTES:
+                                runs_append(2)
+                                runs_append(DEFAULT)
                                 i += 2
-                                expect_class_name = False
-                                expect_def_name = False
+                                expect_state = EXPECT_NONE
                                 continue
-                        runs.append((1, DEFAULT))
+                        runs_append(1)
+                        runs_append(DEFAULT)
                         i += 1
-                        expect_class_name = False
-                        expect_def_name = False
+                        expect_state = EXPECT_NONE
 
-                for length, style in runs:
-                    setStyling(length, style)
+                idx = 0
+                r_len = len(runs)
+                while idx < r_len:
+                    setStyling(runs[idx], runs[idx + 1])
+                    idx += 2
 
                 self.line_cache[cache_key] = (runs, current_state)
+                if len(self.line_cache) > self.CACHE_MAX_SIZE:
+                    self.line_cache.popitem(last=False)
 
             editor.SendScintilla(editor.SCI_SETLINESTATE, current_line, current_state)
 
