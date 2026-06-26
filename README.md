@@ -24,7 +24,7 @@
     </a>
 </p>
 
-A modern, extensible code editor built with PyQt5, featuring syntax highlighting, file tree navigation, Markdown preview, and a flexible plugin system.
+Lumos is a modern, extensible code editor built with PyQt5, featuring syntax highlighting, file tree navigation, Markdown preview, and a flexible plugin system.
 
 ## Screenshots
 
@@ -116,7 +116,7 @@ For plugins of type `"hook"` or `"both"`, the specified `mainFile` is executed i
 > Tip: If you're new to plugin development, start by exploring the [example plugin](./plugins/examples/) included in this repository. It demonstrates how to use the Lumos API to create a simple plugin that adds a menu item and responds to editor events.
 >
 
-The Lumos API provides a powerful and secure interface for integrating your plugins with the editor. All interactions are funneled through the `lumos` object, which is automatically injected into your plugin's global scope. This object serves as the single entry point for accessing all managers, helper functions, and base classes.
+The Lumos API provides a powerful and stable interface for integrating your plugins with the editor. All interactions are funneled through the `lumos` object, which is automatically injected into your plugin's global scope. This object serves as the single entry point for accessing all managers, helper functions, and base classes.
 
 #### Injected API Object
 
