@@ -132,8 +132,7 @@ class VideoViewer(QWidget):
         controls_layout = QGridLayout()
         self.play_button = QPushButton()
         self.play_button.setIcon(self.style().standardIcon(QStyle.SP_MediaPlay))
-        self.play_button.setStyleSheet(
-            f"""
+        self.play_button.setStyleSheet(f"""
             QPushButton {{
                 background-color: {theme.color2};
                 border: 1px solid {theme.color12};
@@ -146,14 +145,12 @@ class VideoViewer(QWidget):
             QPushButton:pressed {{
                 background-color: {theme.color12};
             }}
-            """
-        )
+            """)
         self.play_button.clicked.connect(self.toggle_play_pause)
         controls_layout.addWidget(self.play_button, 0, 0)
         stop_button = QPushButton()
         stop_button.setIcon(self.style().standardIcon(QStyle.SP_MediaStop))
-        stop_button.setStyleSheet(
-            f"""
+        stop_button.setStyleSheet(f"""
             QPushButton {{
                 background-color: {theme.color2};
                 border: 1px solid {theme.color12};
@@ -166,8 +163,7 @@ class VideoViewer(QWidget):
             QPushButton:pressed {{
                 background-color: {theme.color12};
             }}
-            """
-        )
+            """)
         stop_button.clicked.connect(self.stop_media)
         controls_layout.addWidget(stop_button, 0, 1)
         self.progress_slider = QSlider(Qt.Horizontal)
@@ -260,8 +256,7 @@ class AudioViewer(QWidget):
         self.play_button = QPushButton()
         self.play_button.setIcon(self.style().standardIcon(QStyle.SP_MediaPlay))
         self.play_button.clicked.connect(self.toggle_play_pause)
-        self.play_button.setStyleSheet(
-            f"""
+        self.play_button.setStyleSheet(f"""
             QPushButton {{
                 background-color: {theme.color2};
                 border: 1px solid {theme.color12};
@@ -274,13 +269,11 @@ class AudioViewer(QWidget):
             QPushButton:pressed {{
                 background-color: {theme.color12};
             }}
-            """
-        )
+            """)
         controls_layout.addWidget(self.play_button, 0, 0)
         stop_button = QPushButton()
         stop_button.setIcon(self.style().standardIcon(QStyle.SP_MediaStop))
-        stop_button.setStyleSheet(
-            f"""
+        stop_button.setStyleSheet(f"""
             QPushButton {{
                 background-color: {theme.color2};
                 border: 1px solid {theme.color12};
@@ -293,8 +286,7 @@ class AudioViewer(QWidget):
             QPushButton:pressed {{
                 background-color: {theme.color12};
             }}
-            """
-        )
+            """)
         stop_button.clicked.connect(self.stop_media)
         controls_layout.addWidget(stop_button, 0, 1)
         self.progress_slider = QSlider(Qt.Horizontal)

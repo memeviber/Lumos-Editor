@@ -25,15 +25,13 @@ class WelcomeScreen(QWidget):
         title_wrapper_layout.setContentsMargins(0, 0, 0, 0)
         title_wrapper_layout.setSpacing(10)
         title_label = QLabel("LUMOS EDITOR")
-        title_label.setStyleSheet(
-            f"""
+        title_label.setStyleSheet(f"""
             QLabel {{
                 color: {theme.color23};
                 font-size: 58px;
                 font-weight: bold;
             }}
-        """
-        )
+        """)
         title_label.setAlignment(Qt.AlignLeft)
         icon_label = QLabel()
         icon_pixmap = QPixmap("resources:/lumos-gray-icon.png")
@@ -57,16 +55,14 @@ class WelcomeScreen(QWidget):
         title_wrapper_layout.addStretch()
         title_layout.addWidget(title_wrapper)
         subtitle_label = QLabel("Welcome to Lumos Editor!")
-        subtitle_label.setStyleSheet(
-            f"""
+        subtitle_label.setStyleSheet(f"""
             QLabel {{
                 color: {theme.color22};
                 font-size: 32px;
                 margin-top: -5px;
                 font-weight: bold;
             }}
-        """
-        )
+        """)
         subtitle_label.setAlignment(Qt.AlignLeft)
         title_layout.addWidget(subtitle_label)
         actions_widget = QWidget()

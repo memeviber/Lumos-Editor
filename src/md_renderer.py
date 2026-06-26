@@ -20,7 +20,7 @@ class CustomListRenderer(HTMLRenderer):
                 f'<input type="checkbox" disabled{" checked" if checked else ""}>'
             )
             return f'<li class="task-list-item">{checkbox} {"<br>".join(parts)}</li>'
-        return f'<li>{"<br>".join(parts)}</li>'
+        return f"<li>{'<br>'.join(parts)}</li>"
 
     def block_code(self, code, info=None):
         code = textwrap.dedent(code)

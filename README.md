@@ -74,7 +74,13 @@ A modern, extensible code editor built with PyQt5, featuring syntax highlighting
 
 ## Performance Notes
 Lumos Editor is optimized for performance, but keep in mind that it may consume more resources than simpler text editors due to its rich feature set and plugin system. For the best experience, it's recommended to run Lumos Editor on a machine with at least 8GB of RAM and a modern CPU, and always keep it plugged in if you're using a laptop.
- 
+
+## Python Fast Lexer (PyFlex)
+
+**PyFlex** is enabled by default for the best editing performance. It reduces UI lag and keeps typing smooth, especially in large Python files.
+
+If you prefer richer syntax highlighting for smaller files, you can disable PyFlex and use the Pygments Python lexer instead. Keep in mind that it may be slower on files larger than **2,500 LOC**.
+
 ## Plugin System
 
 Lumos Editor supports a powerful plugin system that allows for extending the editor's functionality. You can enable, disable, or manage your installed plugins via the `Plugins` menu.

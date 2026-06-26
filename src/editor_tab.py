@@ -709,8 +709,7 @@ class EditorTab(QWidget):
         self.fold_timer.timeout.connect(self._start_folding_worker)
         self.folding_worker = None
         self.editor.textChanged.connect(self.fold_timer.start)
-        self.editor.setStyleSheet(
-            f"""
+        self.editor.setStyleSheet(f"""
             QScrollBar:horizontal, QScrollBar:vertical {{
                 border: none;
                 background: {theme.color5};
@@ -731,8 +730,7 @@ class EditorTab(QWidget):
                 width: 0px;
                 height: 0px;
             }}
-        """
-        )
+        """)
         self.editor.SendScintilla(getattr(QsciScintilla, "SCI_SETTECHNOLOGY", 2630), 1)
         self.editor.SendScintilla(getattr(QsciScintilla, "SCI_SETFONTQUALITY", 2611), 3)
 

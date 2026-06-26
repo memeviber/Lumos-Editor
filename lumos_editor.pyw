@@ -733,7 +733,6 @@ class MainWindow(QWidget):
         self._wait_plugins_timer.timeout.connect(self._check_plugins_and_restore)
         self._wait_plugins_timer.start(50)
 
-
     def _check_plugins_and_restore(self):
         if getattr(self, "session_restored", False):
             return
@@ -743,10 +742,14 @@ class MainWindow(QWidget):
             self.restore_session()
 
     def sync_terminal_directory(self, folder):
-        if folder and hasattr(self, "terminal_overlay") and self.terminal_overlay.is_running():
-            self.terminal_overlay.push(f'cd "{folder}"\r' + "clear\r"
-                    if sys.platform != "win32"
-                    else "cls\r")
+        if (
+            folder
+            and hasattr(self, "terminal_overlay")
+            and self.terminal_overlay.is_running()
+        ):
+            self.terminal_overlay.push(
+                f'cd "{folder}"\r' + "clear\r" if sys.platform != "win32" else "cls\r"
+            )
 
     def _check_plugins_and_restore(self):
         if getattr(self.plugin_manager, "plugins_loaded", True):
@@ -2614,26 +2617,27 @@ class MainWindow(QWidget):
 
 def main():
     os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
-    
+
     try:
         QApplication.setHighDpiScaleFactorRoundingPolicy(
             Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
         )
     except AttributeError:
         pass
-        
+
     QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
     QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
-    
+
     app = QApplication([])
     app.setAttribute(Qt.AA_DontCreateNativeWidgetSiblings)
     app.setStyle("Fusion")
     app.setProperty("restart_requested", True)
-    
+
     while app.property("restart_requested"):
         app.setProperty("restart_requested", False)
         try:
             from src.theme_manager import theme
+
             theme.reload_theme()
         except Exception as e:
             print(f"Error loading theme at startup: {e}")

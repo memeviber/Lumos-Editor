@@ -1,0 +1,7 @@
+{
+  "name": "Python Fast Lexer",
+  "fileExtensions": [".py", ".pyw"],
+  "lexerFile": "lexer.py",
+  "lexerClass": "PyFlex",
+  "iconFile": "python-icon.png"
+}

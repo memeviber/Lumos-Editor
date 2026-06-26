@@ -18,7 +18,6 @@ from pygments.token import (
     Literal,
     Name,
     Number,
-    Operator,
     Punctuation,
     String,
     Text,
@@ -36,7 +35,7 @@ class DefaultConfig(TypedDict):
 
 
 class BaseLexer(QsciLexerCustom):
-    DEBOUNCE_DELAY = 300
+    DEBOUNCE_DELAY = 200
 
     def __init__(
         self,
@@ -252,19 +251,24 @@ class PygmentsBaseLexer(BaseLexer):
             return
 
         all_text = self.editor.text()
-        bytes_data = all_text.encode("utf-8")[start:end]
-
-        self.startStyling(0)
-
+        self.startStyling(start)
         tokens = lex(all_text, self.pygments_lexer)
+        current_byte_pos = 0
 
         for ttype, value in tokens:
             token_len_bytes = len(value.encode("utf-8"))
-            style_id = self._get_style_from_token(ttype)
+            token_end_pos = current_byte_pos + token_len_bytes
 
-            self.setStyling(token_len_bytes, style_id)
+            if token_end_pos > start and current_byte_pos < end:
+                style_id = self._get_style_from_token(ttype)
+                overlap_start = max(start, current_byte_pos)
+                overlap_end = min(end, token_end_pos)
+                overlap_len = overlap_end - overlap_start
+                self.setStyling(overlap_len, style_id)
 
-        self.editor.SendScintilla(QsciScintilla.SCI_COLOURISE, 0, len(bytes_data))
+            current_byte_pos = token_end_pos
+            if current_byte_pos >= end:
+                break
 
     def _get_style_from_token(self, ttype):
         while ttype in self.token_map:
@@ -303,56 +307,28 @@ class PythonLexer(PygmentsBaseLexer):
         self.token_map = {
             Token.Text: self.DEFAULT,
             Token.Whitespace: self.DEFAULT,
-            Punctuation: self.DEFAULT,
-            Operator: self.DEFAULT,
             Comment: self.COMMENTS,
-            Comment.Hashbang: self.COMMENTS,
-            Comment.Single: self.COMMENTS,
-            Comment.Multiline: self.COMMENTS,
-            String.Doc: self.STRING,
             Keyword: self.KEYWORD,
-            Keyword.ControlFlow: self.KEYWORD,
-            Keyword.Declaration: self.KEYWORD,
             Keyword.Namespace: self.KEYWORD,
             Keyword.Pseudo: self.KEYWORD,
             Keyword.Reserved: self.KEYWORD,
-            Keyword.Operator: self.KEYWORD,
             Keyword.Type: self.TYPES,
+            Keyword.Constant: self.CONSTANTS,
+            Name.Builtin: self.FUNCTIONS,
+            Name.Builtin.Pseudo: self.KEYWORD,
             Name.Class: self.CLASSES,
             Name.Exception: self.CLASSES,
-            Name.Builtin.Pseudo: self.KEYWORD,
             Name.Function: self.FUNCTION_DEF,
-            Name.Builtin: self.FUNCTIONS,
             Name.Decorator: self.FUNCTIONS,
             Name.Function.Call: self.FUNCTIONS,
-            Number: self.CONSTANTS,
-            Number.Bin: self.CONSTANTS,
-            Number.Float: self.CONSTANTS,
-            Number.Hex: self.CONSTANTS,
-            Number.Integer: self.CONSTANTS,
-            Number.Integer.Long: self.CONSTANTS,
-            Number.Oct: self.CONSTANTS,
-            Keyword.Constant: self.CONSTANTS,
             Name.Constant: self.CONSTANTS,
+            Name.Attribute: self.DEFAULT,
+            Number: self.CONSTANTS,
             String: self.STRING,
             String.Affix: self.KEYWORD,
-            String.Backtick: self.STRING,
-            String.Char: self.STRING,
-            String.Delimiter: self.STRING,
-            String.Double: self.STRING,
+            String.Doc: self.STRING,
             String.Escape: self.CONSTANTS,
-            String.Heredoc: self.STRING,
             String.Interpol: self.DEFAULT,
-            String.Other: self.STRING,
-            String.Regex: self.STRING,
-            String.Single: self.STRING,
-            Name.Variable: self.DEFAULT,
-            Name.Variable.Class: self.DEFAULT,
-            Name.Variable.Global: self.DEFAULT,
-            Name.Variable.Instance: self.DEFAULT,
-            Name.Variable.Magic: self.DEFAULT,
-            Name.Attribute: self.DEFAULT,
-            Name.Label: self.DEFAULT,
             Name.Tag: self.KEYWORD,
         }
 

@@ -354,8 +354,7 @@ class AIChat(QWidget):
         self.session_button = QToolButton()
         self.session_button.setText("Sessions")
         self.session_button.setPopupMode(QToolButton.InstantPopup)
-        self.session_button.setStyleSheet(
-            f"""
+        self.session_button.setStyleSheet(f"""
             QToolButton {{ background-color: {theme.color17}; border: 1px solid {theme.color19}; padding: 5px 10px; border-radius: 4px; color: {theme.color27}; }}
             QToolButton:hover {{ background-color: {theme.color19}; }}
             QToolButton:pressed {{ background-color: {theme.color21}; }}
@@ -364,13 +363,11 @@ class AIChat(QWidget):
                 subcontrol-position: right center;
                 padding-right: 5px;
             }}
-            """
-        )
+            """)
         header_layout.addWidget(self.session_button)
         self.search_box = QLineEdit()
         self.search_box.setPlaceholderText("Search chats...")
-        self.search_box.setStyleSheet(
-            f"""
+        self.search_box.setStyleSheet(f"""
         QLineEdit {{
             background-color: {theme.color1};
             border: 1px solid {theme.color12};
@@ -381,32 +378,27 @@ class AIChat(QWidget):
         QLineEdit:focus {{
             border: 1px solid {theme.color35};
         }}
-        """
-        )
+        """)
         self.search_box.textChanged.connect(self.search_sessions)
         header_layout.insertWidget(0, self.search_box)
         self.new_button = QPushButton("New Chat")
-        self.new_button.setStyleSheet(
-            f"""
+        self.new_button.setStyleSheet(f"""
             QPushButton {{ background-color: {theme.color17}; border: 1px solid {theme.color19}; padding: 5px 10px; border-radius: 4px; color: {theme.color27}; }}
             QPushButton:hover {{ background-color: {theme.color19}; }}
             QPushButton:pressed {{ background-color: {theme.color21}; }}
-            """
-        )
+            """)
         self.new_button.clicked.connect(self.new_chat)
         header_layout.addWidget(self.new_button)
         main_layout.addWidget(header_container)
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
-        self.scroll_area.setStyleSheet(
-            f"""
+        self.scroll_area.setStyleSheet(f"""
             QScrollArea {{ border: none; background-color: {theme.color2}; }}
             QScrollBar:vertical {{ background: {theme.color2}; width: 10px; margin: 0; }}
             QScrollBar::handle:vertical {{ background: {theme.color17}; min-height: 20px; border-radius: 5px; }}
             QScrollBar::handle:vertical:hover {{ background: {theme.color19}; }}
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
-            """
-        )
+            """)
         self.chat_container = QWidget()
         self.chat_layout = QVBoxLayout(self.chat_container)
         self.chat_layout.setSpacing(15)
@@ -423,36 +415,30 @@ class AIChat(QWidget):
         context_label.setStyleSheet(f"color: {theme.color27};")
         context_header_layout.addWidget(context_label)
         self.add_context_button = QPushButton("Add Files")
-        self.add_context_button.setStyleSheet(
-            f"""
+        self.add_context_button.setStyleSheet(f"""
             QPushButton {{ background-color: {theme.color17}; border: 1px solid {theme.color19}; padding: 5px 10px; border-radius: 4px; color: {theme.color27}; }}
             QPushButton:hover {{ background-color: {theme.color19}; }}
             QPushButton:pressed {{ background-color: {theme.color21}; }}
-            """
-        )
+            """)
         self.add_context_button.clicked.connect(self.add_context_files)
         context_header_layout.addWidget(self.add_context_button)
         self.clear_context_button = QPushButton("Clear Files")
-        self.clear_context_button.setStyleSheet(
-            f"""
+        self.clear_context_button.setStyleSheet(f"""
             QPushButton {{ background-color: {theme.color17}; border: 1px solid {theme.color19}; padding: 5px 10px; border-radius: 4px; color: {theme.color27}; }}
             QPushButton:hover {{ background-color: {theme.color19}; }}
             QPushButton:pressed {{ background-color: {theme.color21}; }}
-            """
-        )
+            """)
         self.clear_context_button.clicked.connect(self.clear_context_files)
         context_header_layout.addWidget(self.clear_context_button)
         context_header_layout.addStretch()
         context_layout.addWidget(context_header)
         self.context_files_list = QLabel("")
-        self.context_files_list.setStyleSheet(
-            f"""
+        self.context_files_list.setStyleSheet(f"""
             QLabel {{
                 color: {theme.color35};
                 padding: 0 5px;
             }}
-            """
-        )
+            """)
         context_layout.addWidget(self.context_files_list)
         main_layout.addWidget(context_container)
         input_container = QWidget()
@@ -465,8 +451,7 @@ class AIChat(QWidget):
         self.input_text.setPlaceholderText(
             "Ask AI to generate or modify code... (Enter for a new line, press Ctrl+Enter to send)"
         )
-        self.input_text.setStyleSheet(
-            f"""
+        self.input_text.setStyleSheet(f"""
             QTextEdit {{ 
                 color: {theme.color27}; 
                 background-color: {theme.color1}; 
@@ -477,8 +462,7 @@ class AIChat(QWidget):
                 max-height: 100px; 
             }}
             QTextEdit:focus {{ border: 1px solid {theme.color35}; }}
-            """
-        )
+            """)
         self.input_text.setMinimumHeight(40)
         self.input_text.setMaximumHeight(100)
         self.input_text.send_requested.connect(self.send_message)
@@ -487,14 +471,12 @@ class AIChat(QWidget):
         self.send_button.setIcon(QIcon("resources:/send-icon.png"))
         self.send_button.setFixedSize(28, 28)
         self.send_button.setIconSize(QSize(16, 16))
-        self.send_button.setStyleSheet(
-            f"""
+        self.send_button.setStyleSheet(f"""
             QPushButton {{ background-color: {theme.color35}; border-radius: 4px; color: white; }}
             QPushButton:hover {{ background-color: {theme.color37}; }}
             QPushButton:pressed {{ background-color: {theme.color34}; }}
             QPushButton:disabled {{ background-color: {theme.color19}; }}
-            """
-        )
+            """)
         input_layout.addWidget(self.send_button)
         main_layout.addWidget(input_container)
         self.send_button.clicked.connect(self.send_message)
@@ -518,7 +500,7 @@ class AIChat(QWidget):
             hit = any(text in m.get("text", "").lower() for m in messages)
             if hit:
                 found = True
-                label = f'{s.get("name")} ({s.get("count", 0)} msgs)'
+                label = f"{s.get('name')} ({s.get('count', 0)} msgs)"
                 act = QAction(label, self)
                 sid = s.get("id")
                 act.triggered.connect(
@@ -778,7 +760,7 @@ class AIChat(QWidget):
             menu.addAction(empty_action)
         else:
             for s in sessions:
-                label = f'{s.get("name", "Session")} ({s.get("count", 0)} msgs)'
+                label = f"{s.get('name', 'Session')} ({s.get('count', 0)} msgs)"
                 act = QAction(label, self)
                 sid = s.get("id")
                 act.triggered.connect(

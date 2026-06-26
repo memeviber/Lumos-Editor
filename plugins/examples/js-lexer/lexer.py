@@ -116,7 +116,6 @@ JS_LANGUAGE = Language(tsjavascript.language())
 
 
 class JavaScriptLexer(lumos.PygmentsBaseLexer):  # type: ignore
-
     def __init__(self, editor, theme_name="default"):
         super().__init__("JavaScript", editor, theme_name=theme_name)
         self.pygments_lexer = CustomPyG_JavascriptLexer()
