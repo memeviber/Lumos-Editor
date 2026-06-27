@@ -1,4 +1,3 @@
-from .theme_manager import theme
 import collections
 import functools
 import os
@@ -20,6 +19,8 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 from pyte.screens import History
+
+from .theme_manager import theme
 
 if sys.platform == "win32":
     try:

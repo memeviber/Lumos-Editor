@@ -1,4 +1,3 @@
-from .theme_manager import theme
 import base64
 import hashlib
 import inspect
@@ -16,6 +15,7 @@ from PyQt5.QtWidgets import QApplication, QHBoxLayout, QScrollBar, QTextBrowser,
 from src.lexer import JsonLexer, MarkdownLexer, PlainTextLexer, PythonLexer
 
 from . import md_renderer
+from .theme_manager import theme
 
 
 class AutoPairEventFilter(QObject):

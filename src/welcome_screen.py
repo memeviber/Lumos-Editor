@@ -1,7 +1,8 @@
-from .theme_manager import theme
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QPixmap, QColor, QPainter
+from PyQt5.QtGui import QColor, QPainter, QPixmap
 from PyQt5.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
+
+from .theme_manager import theme
 
 
 class WelcomeScreen(QWidget):

@@ -1,5 +1,3 @@
-from .theme_manager import theme
-
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QDialog,
@@ -12,6 +10,8 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+from .theme_manager import theme
 
 
 class CommandPalette(QDialog):

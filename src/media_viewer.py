@@ -1,4 +1,3 @@
-from .theme_manager import theme
 import os
 
 from PyQt5.QtCore import QSize, Qt, QUrl
@@ -15,6 +14,8 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+from .theme_manager import theme
 
 
 class ImageViewer(QWidget):

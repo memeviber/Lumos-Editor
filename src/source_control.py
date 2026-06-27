@@ -1,4 +1,3 @@
-from .theme_manager import theme
 import os
 import shutil
 import time
@@ -21,6 +20,8 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+from .theme_manager import theme
 
 
 class GitPoller(QThread):

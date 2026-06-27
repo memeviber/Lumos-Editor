@@ -1,5 +1,3 @@
-from src.theme_manager import theme
-
 import os
 import sys
 from functools import partial
@@ -72,6 +70,7 @@ from src import (
     VideoViewer,
     WelcomeScreen,
 )
+from src.theme_manager import theme
 
 RADIUS = 8
 SHADOW_PADDING = 20

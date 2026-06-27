@@ -8,3 +8,5 @@ markdown==3.10
 Pygments==2.19.2
 pywinpty==3.0.3
 pyte==0.8.2
+tree-sitter==0.25.2
+tree-sitter-python==0.25.0

@@ -75,11 +75,38 @@ Lumos is a modern, extensible code editor built with PyQt5, featuring syntax hig
 ## Performance Notes
 Lumos Editor is optimized for performance, but keep in mind that it may consume more resources than simpler text editors due to its rich feature set and plugin system. For the best experience, it's recommended to run Lumos Editor on a machine with at least 8GB of RAM and a modern CPU, and always keep it plugged in if you're using a laptop.
 
-## Python Fast Lexer (PyFlex)
+## PyFlex (Python Fast Lexer Plugin)
 
 **PyFlex** is enabled by default for the best editing performance. It reduces UI lag and keeps typing smooth, especially in large Python files.
 
 If you prefer richer syntax highlighting for smaller files, you can disable PyFlex and use the Pygments Python lexer instead. Keep in mind that it may be slower on files larger than **2,500 LOC**.
+
+## RunX (File Runner Plugin)
+
+**RunX** is a lightweight, cross-platform file runner plugin for Lumos Editor. It allows you to run your active file inside the integrated terminal or default system browser with custom arguments.
+
+### Configuration (`runner_commands.json`)
+
+Configure your runner commands by creating `runner_commands.json` in the application root:
+
+```json
+{
+    ".py": "{python} {filepath_q} {args}",
+    ".js": "node {filepath_q} {args}",
+    ".sh": "bash {filepath_q} {args}"
+}
+```
+
+#### Variables:
+- `{filepath}` / `{filepath_q}`: (Quoted) absolute file path.
+- `{filename}` / `{filename_q}`: (Quoted) file name.
+- `{dirname}` / `{dirname_q}`: (Quoted) file directory.
+- `{stem}` / `{stem_q}`: (Quoted) file name without extension.
+- `{args}` / `{args_q}`: (Quoted) custom CLI arguments.
+- `{python}`: Auto-detected active Python path.
+
+> [!NOTE]
+> HTML files (`.html`, `.htm`) open directly in the default system browser.
 
 ## Plugin System
 

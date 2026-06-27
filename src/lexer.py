@@ -1,4 +1,3 @@
-from .theme_manager import theme
 import json
 import keyword
 import os
@@ -27,6 +26,8 @@ from PyQt5.Qsci import QsciAPIs, QsciLexerCustom, QsciScintilla
 from PyQt5.QtCore import QTimer
 from PyQt5.QtGui import QColor, QFont
 
+from .theme_manager import theme
+
 
 class DefaultConfig(TypedDict):
     color: str
@@ -35,8 +36,6 @@ class DefaultConfig(TypedDict):
 
 
 class BaseLexer(QsciLexerCustom):
-    DEBOUNCE_DELAY = 35
-
     def __init__(
         self,
         language_name,
@@ -45,6 +44,7 @@ class BaseLexer(QsciLexerCustom):
         defaults: DefaultConfig = None,
     ):
         super(BaseLexer, self).__init__(editor)
+        self.DEBOUNCE_DELAY = 35
         self.editor = editor
         self.apis = QsciAPIs(self)
         self.language_name = language_name

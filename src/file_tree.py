@@ -26,7 +26,6 @@ class FileTreeDelegate(QStyledItemDelegate):
         self.md_icon = QIcon("resources:/markdown-icon.png")
         self.lumos_icon = QIcon("resources:/lumos-icon.png")
         self.git_icon = QIcon("resources:/gitignore-icon.png")
-        self.binary_icon = QIcon("resources:/binary-icon.png")
 
     def initStyleOption(self, option, index):
         super().initStyleOption(option, index)
@@ -78,8 +77,6 @@ class FileTreeDelegate(QStyledItemDelegate):
             option.icon = self.lumos_icon
         elif option.text == ".gitignore":
             option.icon = self.git_icon
-        elif file_ext in (".bin", ".sql", ".exe", ".dll", ".pyc", ".pyd"):
-            option.icon = self.binary_icon
         else:
             option.icon = self.default_icon
 

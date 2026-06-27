@@ -1,8 +1,9 @@
-import os
 import json
+import os
 from pathlib import Path
-from PyQt5.QtGui import QColor, QPixmap, QPainter
+
 from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QColor, QPainter, QPixmap
 
 
 def blend_color(base_color: QColor, target_color: QColor, ratio: float) -> str:

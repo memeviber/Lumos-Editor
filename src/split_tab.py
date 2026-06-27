@@ -1,4 +1,3 @@
-from .theme_manager import theme
 import difflib
 
 from PyQt5.QtCore import QEvent, Qt
@@ -11,6 +10,8 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+from .theme_manager import theme
 
 
 class SplitTab(QWidget):

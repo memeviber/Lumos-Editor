@@ -1,18 +1,49 @@
-import jedi
-import builtins
-import keyword
 import array
-from collections import OrderedDict
-from PyQt5 import QtCore
+import sys
 
-TOK_NEWLINE = 0
-TOK_SPACE = 1
-TOK_IDENT = 2
-TOK_NUMBER = 3
-TOK_QUOTE = 4
-TOK_COMMENT = 5
-TOK_OPERATOR = 6
-TOK_TEXT = 7
+import jedi
+import tree_sitter_python as tspython
+from PyQt5 import QtCore
+from tree_sitter import Language, Parser, Query, QueryCursor
+
+PY_LANGUAGE = Language(tspython.language())
+
+PYTHON_QUERY = Query(
+    PY_LANGUAGE,
+    """
+    (comment) @comment
+    (string) @string
+    (integer) @number
+    (float) @number
+    
+    "class" @keyword
+    "def" @keyword
+    "if" @keyword
+    "else" @keyword
+    "elif" @keyword
+    "for" @keyword
+    "while" @keyword
+    "return" @keyword
+    "import" @keyword
+    "from" @keyword
+    "try" @keyword
+    "except" @keyword
+    "pass" @keyword
+    "break" @keyword
+    "continue" @keyword
+    "lambda" @keyword
+    "with" @keyword
+    "as" @keyword
+    "global" @keyword
+    "nonlocal" @keyword
+    "assert" @keyword
+    "del" @keyword
+    "yield" @keyword
+    
+    (class_definition name: (identifier) @class_def)
+    (function_definition name: (identifier) @function_def)
+""",
+)
 
 STYLE_DEFAULT = 0
 STYLE_KEYWORD = 1
@@ -25,276 +56,112 @@ STYLE_FUNCTION_DEF = 7
 STYLE_CLASS_DEF = 8
 STYLE_CLASSES = 9
 
-KEYWORDS_BYTES = frozenset(s.encode('utf-8') for s in keyword.kwlist)
-BUILTINS_BYTES = frozenset(s.encode('utf-8') for s in dir(builtins) if not s.startswith("_"))
 
-TWO_OPS_BYTES = frozenset(op.encode('utf-8') for op in [
-    "==", "!=", "<=", ">=", "//", "**", ":=", "->", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<", ">>"
-])
-
-IDENT_CHARS = bytearray(256)
-for _c in b'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_':
-    IDENT_CHARS[_c] = 1
-
-NUM_CHARS = bytearray(256)
-for _c in b'0123456789_.':
-    NUM_CHARS[_c] = 1
-
-SPACE_CHARS = bytearray(256)
-SPACE_CHARS[32] = 1
-SPACE_CHARS[9] = 1
-
-QUOTE_DOUBLE3 = b'"""'
-QUOTE_SINGLE3 = b"'''"
-
-STATE_NORMAL = 0
-STATE_MULTILINE_DOUBLE = 1
-STATE_MULTILINE_SINGLE = 2
-
-EXPECT_NONE = 0
-EXPECT_CLASS = 1
-EXPECT_DEF = 2
-
-
-class PyFlexWorker(QtCore.QObject):
-    styling_ready = QtCore.pyqtSignal(int, object, object)
+class PyTreeSitterWorker(QtCore.QObject):
+    styling_ready = QtCore.pyqtSignal(int, int, object)
 
     def __init__(self):
         super().__init__()
-        self.line_cache = OrderedDict()
-        self.CACHE_MAX_SIZE = 8192
+        self.parser = Parser(PY_LANGUAGE)
+        self.current_tree = None
+        self.latest_generation = 0
         self._is_cancelled = False
 
-    @QtCore.pyqtSlot(int, int, int, bytes)
-    def process(self, start_pos, start_line, initial_state, data):
-        self._is_cancelled = False
-        runs = array.array('i')
-        line_states = {}
+    @QtCore.pyqtSlot(bytes, list, int, int, int)
+    def process_ast(self, data, edits, start_pos, end_pos, generation):
+        try:
+            if generation < self.latest_generation:
+                return
+            self.latest_generation = generation
+            self._is_cancelled = False
 
-        i = 0
-        n = len(data)
-        current_line = start_line
-        current_state = initial_state
+            try:
+                if self.current_tree is not None and edits:
+                    for edit in edits:
+                        self.current_tree.edit(
+                            start_byte=edit["start_byte"],
+                            old_end_byte=edit["old_end_byte"],
+                            new_end_byte=edit["new_end_byte"],
+                            start_point=edit["start_point"],
+                            old_end_point=edit["old_end_point"],
+                            new_end_point=edit["new_end_point"],
+                        )
 
-        while i < n:
-            if self._is_cancelled:
+                tree = self.parser.parse(data, self.current_tree)
+            except Exception:
+                tree = self.parser.parse(data)
+
+            self.current_tree = tree
+            if not tree or not tree.root_node:
                 return
 
-            line_end = data.find(b'\n', i)
-            if line_end == -1:
-                line_end = n - 1
+            query_cursor = QueryCursor(PYTHON_QUERY)
+            try:
+                query_cursor.set_byte_range(start_pos, end_pos)
+            except AttributeError:
+                pass
 
-            actual_len = (line_end + 1) - i
-            line_bytes = data[i:i + actual_len]
+            captures = query_cursor.captures(tree.root_node)
 
-            cache_key = (hash(line_bytes), actual_len, current_state)
-            cached = self.line_cache.get(cache_key)
+            node_styles = []
+            for tag, nodes in captures.items():
+                for node in nodes:
+                    if node.start_byte < end_pos and node.end_byte > start_pos:
+                        node_styles.append((node, tag))
 
-            if cached is not None:
-                self.line_cache.move_to_end(cache_key)
-                runs.extend(cached[0])
-                current_state = cached[1]
-            else:
-                line_runs = array.array('i')
-                append = line_runs.append
-                expect_state = EXPECT_NONE
+            node_styles.sort(key=lambda x: x[0].start_byte)
 
-                k = 0
-                line_n = actual_len
+            runs = array.array("i")
+            append = runs.append
 
-                while k < line_n:
-                    if current_state == STATE_MULTILINE_DOUBLE:
-                        j = line_bytes.find(QUOTE_DOUBLE3, k)
-                        if j == -1:
-                            append(line_n - k)
-                            append(STYLE_STRING)
-                            k = line_n
-                        else:
-                            bs = 0
-                            idx = j - 1
-                            while idx >= k and line_bytes[idx] == 92:
-                                bs += 1
-                                idx -= 1
-                            if bs % 2 == 0:
-                                j += 3
-                                append(j - k)
-                                append(STYLE_STRING)
-                                current_state = STATE_NORMAL
-                                k = j
-                            else:
-                                j += 3
-                                append(j - k)
-                                append(STYLE_STRING)
-                                k = j
-                        continue
+            last_pos = start_pos
+            for node, tag in node_styles:
+                if self._is_cancelled or generation < self.latest_generation:
+                    return
 
-                    elif current_state == STATE_MULTILINE_SINGLE:
-                        j = line_bytes.find(QUOTE_SINGLE3, k)
-                        if j == -1:
-                            append(line_n - k)
-                            append(STYLE_STRING)
-                            k = line_n
-                        else:
-                            bs = 0
-                            idx = j - 1
-                            while idx >= k and line_bytes[idx] == 92:
-                                bs += 1
-                                idx -= 1
-                            if bs % 2 == 0:
-                                j += 3
-                                append(j - k)
-                                append(STYLE_STRING)
-                                current_state = STATE_NORMAL
-                                k = j
-                            else:
-                                j += 3
-                                append(j - k)
-                                append(STYLE_STRING)
-                                k = j
-                        continue
+                start = max(node.start_byte, start_pos)
+                end = min(node.end_byte, end_pos)
 
-                    c = line_bytes[k]
+                if start >= end:
+                    continue
 
-                    if SPACE_CHARS[c]:
-                        j = k + 1
-                        while j < line_n and SPACE_CHARS[line_bytes[j]]:
-                            j += 1
-                        append(j - k)
-                        append(STYLE_DEFAULT)
-                        k = j
+                if start < last_pos:
+                    continue
 
-                    elif c == 10 or c == 13:
-                        j = k + 1
-                        if c == 13 and j < line_n and line_bytes[j] == 10:
-                            j += 1
-                        append(j - k)
-                        append(STYLE_DEFAULT)
-                        k = j
+                if start > last_pos:
+                    append(start - last_pos)
+                    append(STYLE_DEFAULT)
 
-                    elif c == 35:
-                        j = line_bytes.find(b'\n', k)
-                        if j == -1:
-                            j = line_n
-                        append(j - k)
-                        append(STYLE_COMMENTS)
-                        k = j
-                        expect_state = EXPECT_NONE
+                style = STYLE_DEFAULT
+                if tag == "comment":
+                    style = STYLE_COMMENTS
+                elif tag == "string":
+                    style = STYLE_STRING
+                elif tag == "class_def":
+                    style = STYLE_CLASSES
+                elif tag == "function_def":
+                    style = STYLE_FUNCTION_DEF
+                elif tag == "keyword":
+                    style = STYLE_KEYWORD
+                elif tag == "number":
+                    style = STYLE_CONSTANTS
 
-                    elif c == 34 or c == 39:
-                        if k + 2 < line_n and line_bytes[k + 1] == c and line_bytes[k + 2] == c:
-                            current_state = STATE_MULTILINE_DOUBLE if c == 34 else STATE_MULTILINE_SINGLE
-                            append(3)
-                            append(STYLE_STRING)
-                            k += 3
-                        else:
-                            quote = c
-                            j = k + 1
-                            while True:
-                                j = line_bytes.find(quote, j)
-                                if j == -1:
-                                    j = line_n
-                                    break
-                                bs = 0
-                                idx = j - 1
-                                while idx >= k and line_bytes[idx] == 92:
-                                    bs += 1
-                                    idx -= 1
-                                if bs % 2 == 0:
-                                    j += 1
-                                    break
-                                j += 1
-                            append(j - k)
-                            append(STYLE_STRING)
-                            k = j
-                        expect_state = EXPECT_NONE
+                append(end - start)
+                append(style)
+                last_pos = end
 
-                    elif IDENT_CHARS[c] and not (48 <= c <= 57):
-                        j = k + 1
-                        while j < line_n and IDENT_CHARS[line_bytes[j]]:
-                            j += 1
+            if end_pos > last_pos:
+                append(end_pos - last_pos)
+                append(STYLE_DEFAULT)
 
-                        tok = line_bytes[k:j]
-                        style_to_apply = STYLE_DEFAULT
+            if not self._is_cancelled and generation == self.latest_generation:
+                self.styling_ready.emit(generation, start_pos, runs)
 
-                        if expect_state == EXPECT_CLASS:
-                            style_to_apply = STYLE_CLASSES
-                            expect_state = EXPECT_NONE
-                        elif expect_state == EXPECT_DEF:
-                            style_to_apply = STYLE_FUNCTION_DEF
-                            expect_state = EXPECT_NONE
-                        elif tok == b"class":
-                            style_to_apply = STYLE_KEYWORD
-                            expect_state = EXPECT_CLASS
-                        elif tok == b"def":
-                            style_to_apply = STYLE_KEYWORD
-                            expect_state = EXPECT_DEF
-                        elif tok == b"self":
-                            style_to_apply = STYLE_KEYWORD
-                        elif tok in KEYWORDS_BYTES:
-                            style_to_apply = STYLE_KEYWORD
-                        elif tok in BUILTINS_BYTES:
-                            style_to_apply = STYLE_FUNCTIONS
-                        else:
-                            x = j
-                            while x < line_n and SPACE_CHARS[line_bytes[x]]:
-                                x += 1
-                            if x < line_n and line_bytes[x] == 40:
-                                style_to_apply = STYLE_FUNCTIONS
+        except Exception as e:
+            import traceback
 
-                        append(j - k)
-                        append(style_to_apply)
-                        k = j
-
-                    elif NUM_CHARS[c]:
-                        j = k + 1
-                        while j < line_n and NUM_CHARS[line_bytes[j]]:
-                            j += 1
-                        append(j - k)
-                        append(STYLE_CONSTANTS)
-                        k = j
-                        expect_state = EXPECT_NONE
-
-                    elif c == 64:
-                        j = k + 1
-                        while j < line_n and SPACE_CHARS[line_bytes[j]]:
-                            j += 1
-                        if j < line_n and IDENT_CHARS[line_bytes[j]] and not (48 <= line_bytes[j] <= 57):
-                            x = j + 1
-                            while x < line_n and IDENT_CHARS[line_bytes[x]]:
-                                x += 1
-                            append(x - k)
-                            append(STYLE_FUNCTIONS)
-                            k = x
-                        else:
-                            append(1)
-                            append(STYLE_DEFAULT)
-                            k += 1
-                        expect_state = EXPECT_NONE
-
-                    else:
-                        if k + 1 < line_n:
-                            if line_bytes[k : k + 2] in TWO_OPS_BYTES:
-                                append(2)
-                                append(STYLE_DEFAULT)
-                                k += 2
-                                expect_state = EXPECT_NONE
-                                continue
-                        append(1)
-                        append(STYLE_DEFAULT)
-                        k += 1
-                        expect_state = EXPECT_NONE
-
-                runs.extend(line_runs)
-                self.line_cache[cache_key] = (line_runs, current_state)
-                if len(self.line_cache) > self.CACHE_MAX_SIZE:
-                    self.line_cache.popitem(last=False)
-
-            line_states[current_line] = current_state
-            i += actual_len
-            current_line += 1
-
-        if not self._is_cancelled:
-            self.styling_ready.emit(start_pos, runs, line_states)
+            print("[Worker] LỖI trong process_ast!", file=sys.stderr, flush=True)
+            traceback.print_exc()
 
     def cancel(self):
         self._is_cancelled = True
@@ -303,51 +170,140 @@ class PyFlexWorker(QtCore.QObject):
 class PyFlex(lumos.BaseLexer):  # type: ignore
     def __init__(self, editor, theme_name="default"):
         super().__init__("Python", editor, theme_name=theme_name)
-        
+
+        self.DEBOUNCE_DELAY = 15
+        self.generation = 0
+        self.edits_queue = []
+
         self.worker_thread = QtCore.QThread(self.editor)
-        self.worker = PyFlexWorker()
+        self.worker = PyTreeSitterWorker()
         self.worker.moveToThread(self.worker_thread)
         self.worker.styling_ready.connect(self._apply_styling)
         self.worker_thread.start()
-        
+
+        self.editor.SCN_MODIFIED.connect(self._on_modified)
         self.editor.destroyed.connect(self._cleanup_thread)
 
+    def _on_modified(
+        self,
+        position,
+        modificationType,
+        text,
+        length,
+        linesAdded,
+        line,
+        foldLevelNow,
+        foldLevelPrev,
+        token,
+        annotationLinesAdded,
+    ):
+        try:
+            SC_MOD_INSERTTEXT = 0x1
+            SC_MOD_DELETETEXT = 0x2
+
+            if not (modificationType & (SC_MOD_INSERTTEXT | SC_MOD_DELETETEXT)):
+                return
+
+            if isinstance(text, str):
+                text_bytes = text.encode("utf-8", errors="ignore")
+            else:
+                text_bytes = text if text else b""
+
+            editor = self.editor
+            row = editor.SendScintilla(editor.SCI_LINEFROMPOSITION, position)
+            col = position - editor.SendScintilla(editor.SCI_POSITIONFROMLINE, row)
+
+            start_byte = position
+            start_point = (row, col)
+
+            if modificationType & SC_MOD_INSERTTEXT:
+                old_end_byte = position
+                new_end_byte = position + length
+                old_end_point = (row, col)
+
+                new_end_row = editor.SendScintilla(
+                    editor.SCI_LINEFROMPOSITION, position + length
+                )
+                new_end_col = (position + length) - editor.SendScintilla(
+                    editor.SCI_POSITIONFROMLINE, new_end_row
+                )
+                new_end_point = (new_end_row, new_end_col)
+            else:
+                old_end_byte = position + length
+                new_end_byte = position
+                new_end_point = (row, col)
+
+                num_newlines = text_bytes.count(b"\n")
+                if num_newlines == 0:
+                    old_end_row = row
+                    old_end_col = col + len(text_bytes)
+                else:
+                    old_end_row = row + num_newlines
+                    old_end_col = len(text_bytes.split(b"\n")[-1])
+                old_end_point = (old_end_row, old_end_col)
+
+            edit_info = {
+                "start_byte": start_byte,
+                "old_end_byte": old_end_byte,
+                "new_end_byte": new_end_byte,
+                "start_point": start_point,
+                "old_end_point": old_end_point,
+                "new_end_point": new_end_point,
+            }
+            self.edits_queue.append(edit_info)
+        except Exception:
+            pass
+
     def _do_style_text(self, start: int, end: int):
+        self.generation += 1
         self.worker.cancel()
+        self.worker.latest_generation = self.generation
 
         editor = self.editor
+
         start_line = editor.SendScintilla(editor.SCI_LINEFROMPOSITION, start)
         line_start_pos = editor.SendScintilla(editor.SCI_POSITIONFROMLINE, start_line)
-
         if line_start_pos < start:
             start = line_start_pos
 
-        initial_state = editor.SendScintilla(editor.SCI_GETLINESTATE, start_line - 1) if start_line > 0 else STATE_NORMAL
-        
-        full_text = editor.text()
-        full_bytes = full_text.encode('utf-8')
-        data_slice = full_bytes[start:]
+        doc_len = editor.SendScintilla(editor.SCI_GETTEXTLENGTH)
+        if end > doc_len:
+            end = doc_len
 
-        QtCore.QMetaObject.invokeMethod(self.worker, "process",
-                                        QtCore.Qt.QueuedConnection,
-                                        QtCore.Q_ARG(int, start),
-                                        QtCore.Q_ARG(int, start_line),
-                                        QtCore.Q_ARG(int, initial_state),
-                                        QtCore.Q_ARG(bytes, data_slice))
+        if doc_len > 0:
+            data_slice = bytearray(doc_len)
+            editor.SendScintilla(editor.SCI_GETTEXTRANGE, 0, doc_len, data_slice)
+            data_bytes = bytes(data_slice)
+        else:
+            data_bytes = b""
 
-    @QtCore.pyqtSlot(int, object, object)
-    def _apply_styling(self, start_pos, runs, line_states):
+        edits_to_apply = list(self.edits_queue)
+        self.edits_queue.clear()
+
+        QtCore.QMetaObject.invokeMethod(
+            self.worker,
+            "process_ast",
+            QtCore.Qt.QueuedConnection,
+            QtCore.Q_ARG(bytes, data_bytes),
+            QtCore.Q_ARG(list, edits_to_apply),
+            QtCore.Q_ARG(int, start),
+            QtCore.Q_ARG(int, end),
+            QtCore.Q_ARG(int, self.generation),
+        )
+
+    @QtCore.pyqtSlot(int, int, object)
+    def _apply_styling(self, generation, start_pos, runs):
+        if generation != self.generation:
+            return
+
         self.startStyling(start_pos)
         setStyling = self.setStyling
-        
+
         idx = 0
         r_len = len(runs)
         while idx < r_len:
-            setStyling(runs[idx], runs[idx+1])
+            setStyling(runs[idx], runs[idx + 1])
             idx += 2
-            
-        for line, state in line_states.items():
-            self.editor.SendScintilla(self.editor.SCI_SETLINESTATE, line, state)
 
     def _cleanup_thread(self):
         self.worker.cancel()
@@ -356,7 +312,15 @@ class PyFlex(lumos.BaseLexer):  # type: ignore
 
     def build_apis(self):
         self.apis.clear()
-        code = self.editor.text()
+        doc_len = self.editor.SendScintilla(self.editor.SCI_GETTEXTLENGTH)
+
+        if doc_len > 0:
+            source = bytearray(doc_len + 1)
+            self.editor.SendScintilla(self.editor.SCI_GETTEXT, doc_len + 1, source)
+            code = source[:-1].decode("utf-8", errors="ignore")
+        else:
+            code = ""
+
         line, col = self.editor.getCursorPosition()
         pos = self.editor.SendScintilla(self.editor.SCI_GETCURRENTPOS)
         style = (

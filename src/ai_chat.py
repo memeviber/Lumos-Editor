@@ -1,4 +1,3 @@
-from .theme_manager import theme
 import base64
 import json
 import os
@@ -33,6 +32,7 @@ from PyQt5.QtWidgets import (
 )
 
 from . import md_renderer
+from .theme_manager import theme
 
 MARKDOWN_CSS = f"""
 body {{
