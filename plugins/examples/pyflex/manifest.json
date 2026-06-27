@@ -1,5 +1,7 @@
 {
   "name": "Python Fast Lexer",
+  "version": "1.5.0",
+  "author": "MemeViber",
   "fileExtensions": [".py", ".pyw"],
   "lexerFile": "lexer.py",
   "lexerClass": "PyFlex",
