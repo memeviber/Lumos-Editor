@@ -1,5 +1,4 @@
 import array
-import sys
 
 import jedi
 import tree_sitter_python as tspython
@@ -157,10 +156,8 @@ class PyTreeSitterWorker(QtCore.QObject):
             if not self._is_cancelled and generation == self.latest_generation:
                 self.styling_ready.emit(generation, start_pos, runs)
 
-        except Exception as e:
+        except Exception:
             import traceback
-
-            print("[Worker] LỖI trong process_ast!", file=sys.stderr, flush=True)
             traceback.print_exc()
 
     def cancel(self):
