@@ -158,6 +158,7 @@ class PyTreeSitterWorker(QtCore.QObject):
 
         except Exception:
             import traceback
+
             traceback.print_exc()
 
     def cancel(self):

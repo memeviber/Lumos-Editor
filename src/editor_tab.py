@@ -673,8 +673,6 @@ class EditorTab(QWidget):
             self.setup_python_features()
         elif filepath.endswith(".json"):
             self.setup_json_features()
-        elif filepath.endswith((".js", ".jsx", ".ts", ".tsx")):
-            self.setup_javascript_features()
         elif self.is_markdown:
             self.setup_markdown_features()
         else:
