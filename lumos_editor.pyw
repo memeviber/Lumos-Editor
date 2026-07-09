@@ -1162,8 +1162,6 @@ class MainWindow(QWidget):
         edit_menu.addSeparator()
         edit_menu.addAction("Select All", self.select_all, QKeySequence.SelectAll)
         edit_menu.addSeparator()
-        edit_menu.addAction("Find", self.show_find_dialog, QKeySequence("Ctrl+F"))
-        edit_menu.addAction("Replace", self.show_replace_dialog, QKeySequence("Ctrl+H"))
         edit_menu.addAction(
             "Find in File", self.show_find_dialog, QKeySequence("Ctrl+F")
         )
