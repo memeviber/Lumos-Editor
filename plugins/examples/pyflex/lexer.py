@@ -44,17 +44,6 @@ PYTHON_QUERY = Query(
 """,
 )
 
-STYLE_DEFAULT = 0
-STYLE_KEYWORD = 1
-STYLE_TYPES = 2
-STYLE_STRING = 3
-STYLE_COMMENTS = 4
-STYLE_CONSTANTS = 5
-STYLE_FUNCTIONS = 6
-STYLE_FUNCTION_DEF = 7
-STYLE_CLASS_DEF = 8
-STYLE_CLASSES = 9
-
 
 class PyTreeSitterWorker(QtCore.QObject):
     styling_ready = QtCore.pyqtSignal(int, int, object)
@@ -68,6 +57,13 @@ class PyTreeSitterWorker(QtCore.QObject):
 
     @QtCore.pyqtSlot(bytes, list, int, int, int)
     def process_ast(self, data, edits, start_pos, end_pos, generation):
+        STYLE_DEFAULT = 0
+        STYLE_KEYWORD = 1
+        STYLE_STRING = 2
+        STYLE_COMMENTS = 3
+        STYLE_CONSTANTS = 4
+        STYLE_FUNCTION_DEF = 5
+        STYLE_CLASSES = 6
         try:
             if generation < self.latest_generation:
                 return
