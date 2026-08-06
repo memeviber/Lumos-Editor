@@ -1,7 +1,8 @@
-import collections
 import functools
 import os
+import queue
 import sys
+import time
 
 import pyte
 from PyQt5 import QtCore
@@ -12,13 +13,13 @@ from PyQt5.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QPlainTextEdit,
     QScrollBar,
     QSizePolicy,
+    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
-from pyte.screens import History
+from pyte.screens import Char, History
 
 from .theme_manager import theme
 
@@ -34,6 +35,42 @@ else:
     import struct
     import subprocess
     import termios
+
+
+COLOR_MAP = {
+    "black": "#000000",
+    "red": "#cd3131",
+    "green": "#0dbc79",
+    "brown": "#e5e510",
+    "yellow": "#e5e510",
+    "blue": "#2472c8",
+    "magenta": "#bc3fbc",
+    "cyan": "#11a8cd",
+    "white": "#e5e5e5",
+    "brightblack": "#666666",
+    "brightred": "#f14c4c",
+    "brightgreen": "#23d18b",
+    "brightyellow": "#f5f543",
+    "brightblue": "#3b8eea",
+    "brightmagenta": "#d670d6",
+    "brightcyan": "#29b8db",
+    "brightwhite": "#ffffff",
+}
+
+
+def get_color_hex(color_str, default_color):
+    if not color_str or color_str == "default":
+        return default_color
+
+    color_str = color_str.lower().strip()
+    if color_str in COLOR_MAP:
+        return COLOR_MAP[color_str]
+
+    clean_hex = color_str.lstrip("#")
+    if len(clean_hex) in (3, 6) and all(c in "0123456789abcdef" for c in clean_hex):
+        return f"#{clean_hex}"
+
+    return default_color
 
 
 def SafeSlot(*slot_args, **slot_kwargs):
@@ -83,7 +120,6 @@ control_keys_mapping = {
     QtCore.Qt.Key_Underscore: b"\x1f",
 }
 
-
 normal_keys_mapping = {
     QtCore.Qt.Key_Return: b"\n",
     QtCore.Qt.Key_Space: b" ",
@@ -100,16 +136,6 @@ normal_keys_mapping = {
     QtCore.Qt.Key_PageDown: b"\x51",
     QtCore.Qt.Key_F1: b"\x1b\x31",
     QtCore.Qt.Key_F2: b"\x1b\x32",
-    QtCore.Qt.Key_F3: b"\x1b\x33",
-    QtCore.Qt.Key_F4: b"\x1b\x34",
-    QtCore.Qt.Key_F5: b"\x1b\x35",
-    QtCore.Qt.Key_F6: b"\x1b\x36",
-    QtCore.Qt.Key_F7: b"\x1b\x37",
-    QtCore.Qt.Key_F8: b"\x1b\x38",
-    QtCore.Qt.Key_F9: b"\x1b\x39",
-    QtCore.Qt.Key_F10: b"\x1b\x30",
-    QtCore.Qt.Key_F11: b"\x45",
-    QtCore.Qt.Key_F12: b"\x46",
 }
 
 
@@ -134,7 +160,7 @@ def QtKeyToAscii(event):
 
 
 class Screen(pyte.HistoryScreen):
-    def __init__(self, write_callback, cols, rows, historyLength):
+    def __init__(self, write_callback, cols, rows, historyLength=1000):
         super().__init__(cols, rows, historyLength, ratio=1 / rows)
         self._write_callback = write_callback
 
@@ -176,7 +202,8 @@ class Screen(pyte.HistoryScreen):
 
 
 class Backend(QtCore.QThread):
-    dataReady = pyqtSignal(bytes)
+    htmlReady = pyqtSignal(str, int, int)
+    scrollBarUpdate = pyqtSignal(int)
     processExited = pyqtSignal()
 
     def __init__(self, cmd, cols, rows):
@@ -188,6 +215,19 @@ class Backend(QtCore.QThread):
         self.pty_win = None
         self.master_fd = None
         self.proc = None
+
+        self.screen = Screen(self.write, self.cols, self.rows, 1000)
+        self.stream = pyte.ByteStream()
+        self.stream.attach(self.screen)
+
+        self.output_buffer = []
+        self.need_update = False
+
+        self.pending_resize = None
+        self.pending_page_action = None
+
+        self.input_queue = queue.Queue()
+
         if sys.platform == "win32":
             self._init_windows()
         else:
@@ -211,10 +251,12 @@ class Backend(QtCore.QThread):
         except Exception as e:
             err_msg = f"\r\n[!] Failed to spawn terminal: {cmd}\r\n[!] Error: {e}\r\n"
             QtCore.QTimer.singleShot(
-                100, lambda: self.dataReady.emit(err_msg.encode("utf-8"))
+                100, lambda: self.stream.feed(err_msg.encode("utf-8"))
             )
 
     def _init_posix(self):
+        import pty
+
         self.master_fd, slave_fd = pty.openpty()
         env = os.environ.copy()
         env["COLUMNS"] = str(self.cols)
@@ -227,6 +269,8 @@ class Backend(QtCore.QThread):
 
             cmd = shlex.split(cmd)
         try:
+            import subprocess
+
             self.proc = subprocess.Popen(
                 cmd,
                 preexec_fn=os.setsid,
@@ -238,86 +282,34 @@ class Backend(QtCore.QThread):
         except Exception as e:
             err_msg = f"\r\n[!] Failed to spawn terminal: {cmd}\r\n[!] Error: {e}\r\n"
             QtCore.QTimer.singleShot(
-                100, lambda: self.dataReady.emit(err_msg.encode("utf-8"))
+                100, lambda: self.stream.feed(err_msg.encode("utf-8"))
             )
         os.close(slave_fd)
 
-    def run(self):
-        import time
-
-        if sys.platform == "win32":
-            if PTY is None:
-                self.dataReady.emit(
-                    b"\r\n[!] ERROR: 'pywinpty' is not installed.\r\n[!] Please run 'pip install pywinpty' to enable terminal support on Windows.\r\n"
-                )
-                self.running = False
-                self.processExited.emit()
-                return
-            if not self.pty_win:
-                self.processExited.emit()
-                return
-            while self.running:
-                try:
-                    try:
-                        out = self.pty_win.read(length=65536, blocking=False)
-                    except TypeError:
-                        out = self.pty_win.read(blocking=False)
-                    if not out:
-                        alive = True
-                        if hasattr(self.pty_win, "isalive"):
-                            alive = self.pty_win.isalive()
-                        if not alive:
-                            break
-                        time.sleep(0.01)
-                        continue
-                    if isinstance(out, str):
-                        out = out.encode("utf-8")
-                    self.dataReady.emit(out)
-                except EOFError:
-                    break
-                except Exception as e:
-                    self.dataReady.emit(
-                        f"\r\n[!] PTY read exception: {e}\r\n".encode("utf-8")
-                    )
-                    break
-        else:
-            while self.running:
-                try:
-                    r, _, _ = select.select([self.master_fd], [], [], 0.1)
-                    if self.master_fd in r:
-                        out = os.read(self.master_fd, 65536)
-                        if not out:
-                            break
-                        self.dataReady.emit(out)
-                    if self.proc and self.proc.poll() is not None:
-                        break
-                except OSError as e:
-                    self.dataReady.emit(
-                        f"\r\n[!] Posix read exception: {e}\r\n".encode("utf-8")
-                    )
-                    break
-        self.running = False
-        self.processExited.emit()
-
     def write(self, data):
-        if sys.platform == "win32":
-            if self.pty_win:
-                if isinstance(data, bytes):
-                    data = data.decode("utf-8")
-                try:
-                    self.pty_win.write(data)
-                except Exception:
-                    pass
-        else:
-            if self.master_fd is not None:
-                if isinstance(data, str):
-                    data = data.encode("utf-8")
-                try:
-                    os.write(self.master_fd, data)
-                except OSError:
-                    pass
+        if isinstance(data, str):
+            data = data.encode("utf-8")
+        self.input_queue.put(data)
+
+    def _process_input_queue(self):
+        while not self.input_queue.empty():
+            try:
+                data = self.input_queue.get_nowait()
+                if sys.platform == "win32":
+                    if self.pty_win:
+                        self.pty_win.write(data.decode("utf-8"))
+                else:
+                    if self.master_fd is not None:
+                        os.write(self.master_fd, data)
+            except queue.Empty:
+                break
+            except Exception:
+                pass
 
     def resize(self, rows, cols):
+        self.pending_resize = (rows, cols)
+
+    def _execute_resize(self, rows, cols):
         self.rows = rows
         self.cols = cols
         if sys.platform == "win32":
@@ -333,6 +325,272 @@ class Backend(QtCore.QThread):
                     fcntl.ioctl(self.master_fd, termios.TIOCSWINSZ, winsize)
                 except OSError:
                     pass
+        self.screen.resize(rows, cols)
+        self.need_update = True
+
+    def prev_page(self):
+        self.pending_page_action = "PREV"
+
+    def next_page(self):
+        self.pending_page_action = "NEXT"
+
+    def run(self):
+        last_update_time = 0
+        base_interval = 0.033
+        flood_interval = 0.20
+        update_interval = base_interval
+        consecutive_reads = 0
+
+        if sys.platform == "win32":
+            if not self.pty_win:
+                self.processExited.emit()
+                return
+            while self.running:
+                if self.pending_resize:
+                    r, c = self.pending_resize
+                    self.pending_resize = None
+                    self._execute_resize(r, c)
+                if self.pending_page_action:
+                    act = self.pending_page_action
+                    self.pending_page_action = None
+                    if act == "PREV":
+                        self.screen.prev_page()
+                    elif act == "NEXT":
+                        self.screen.next_page()
+                    self.need_update = True
+
+                self._process_input_queue()
+
+                try:
+                    try:
+                        out = self.pty_win.read(length=16384, blocking=False)
+                    except TypeError:
+                        out = self.pty_win.read(blocking=False)
+                    if out:
+                        if isinstance(out, str):
+                            out = out.encode("utf-8")
+                        self.stream.feed(out)
+                        self.need_update = True
+                        consecutive_reads = min(consecutive_reads + 1, 20)
+                    else:
+                        consecutive_reads = max(consecutive_reads - 1, 0)
+                        alive = True
+                        if hasattr(self.pty_win, "isalive"):
+                            alive = self.pty_win.isalive()
+                        if not alive:
+                            break
+                        time.sleep(0.01)
+                except EOFError:
+                    break
+                except Exception:
+                    break
+
+                if consecutive_reads >= 5:
+                    update_interval = flood_interval
+                    self.msleep(2)
+                else:
+                    update_interval = base_interval
+
+                curr_time = time.time()
+                force_instant_update = consecutive_reads == 0 and self.need_update
+
+                if self.need_update and (
+                    force_instant_update
+                    or (curr_time - last_update_time >= update_interval)
+                ):
+                    html, cx, cy = self.render_html()
+                    self.htmlReady.emit(html, cx, cy)
+                    self.scrollBarUpdate.emit(
+                        len(self.screen.history.top) + len(self.screen.history.bottom)
+                    )
+                    last_update_time = curr_time
+                    self.need_update = False
+
+            if self.need_update:
+                html, cx, cy = self.render_html()
+                self.htmlReady.emit(html, cx, cy)
+                self.scrollBarUpdate.emit(
+                    len(self.screen.history.top) + len(self.screen.history.bottom)
+                )
+        else:
+            while self.running:
+                if self.pending_resize:
+                    r, c = self.pending_resize
+                    self.pending_resize = None
+                    self._execute_resize(r, c)
+                if self.pending_page_action:
+                    act = self.pending_page_action
+                    self.pending_page_action = None
+                    if act == "PREV":
+                        self.screen.prev_page()
+                    elif act == "NEXT":
+                        self.screen.next_page()
+                    self.need_update = True
+
+                self._process_input_queue()
+
+                try:
+                    r_fds, _, _ = select.select([self.master_fd], [], [], 0.02)
+                    if self.master_fd in r_fds:
+                        out = os.read(self.master_fd, 16384)
+                        if not out:
+                            break
+                        self.stream.feed(out)
+                        self.need_update = True
+                        consecutive_reads = min(consecutive_reads + 1, 20)
+                    else:
+                        consecutive_reads = max(consecutive_reads - 1, 0)
+                    if self.proc and self.proc.poll() is not None:
+                        break
+                except OSError:
+                    break
+
+                if consecutive_reads >= 5:
+                    update_interval = flood_interval
+                    self.msleep(2)
+                else:
+                    update_interval = base_interval
+
+                curr_time = time.time()
+                force_instant_update = consecutive_reads == 0 and self.need_update
+
+                if self.need_update and (
+                    force_instant_update
+                    or (curr_time - last_update_time >= update_interval)
+                ):
+                    html, cx, cy = self.render_html()
+                    self.htmlReady.emit(html, cx, cy)
+                    self.scrollBarUpdate.emit(
+                        len(self.screen.history.top) + len(self.screen.history.bottom)
+                    )
+                    last_update_time = curr_time
+                    self.need_update = False
+
+            if self.need_update:
+                html, cx, cy = self.render_html()
+                self.htmlReady.emit(html, cx, cy)
+                self.scrollBarUpdate.emit(
+                    len(self.screen.history.top) + len(self.screen.history.bottom)
+                )
+
+        self.running = False
+        self.processExited.emit()
+
+    def render_html(self):
+        screen = self.screen
+
+        while len(self.output_buffer) < (
+            max(screen.dirty) + 1 if screen.dirty else screen.lines
+        ):
+            self.output_buffer.append([])
+        while len(self.output_buffer) > (
+            max(screen.dirty) + 1 if screen.dirty else screen.lines
+        ):
+            self.output_buffer.pop()
+
+        for line_no in screen.dirty:
+            line_chars = []
+            buffer_line = screen.buffer[line_no]
+            for col in range(screen.columns):
+                ch = buffer_line.get(col)
+                if ch is None:
+                    ch = Char(data=" ", fg="default", bg="default")
+                line_chars.append(ch)
+            self.output_buffer[line_no] = line_chars
+
+        default_fg = theme.color26 if hasattr(theme, "color26") else "#e5e5e5"
+        default_bg = theme.color2 if hasattr(theme, "color2") else "#1e1e1e"
+
+        html_lines = []
+        for line_chars in self.output_buffer:
+            html_line = ""
+            current_span = ""
+            last_style = None
+
+            for ch in line_chars:
+                fg = ch.fg
+                bg = ch.bg
+                if getattr(ch, "reverse", False):
+                    fg, bg = bg, fg
+
+                fg_color = get_color_hex(fg, default_fg)
+                bg_color = get_color_hex(bg, None)
+
+                styles = []
+                if fg_color:
+                    styles.append(f"color:{fg_color}")
+                if bg_color:
+                    styles.append(f"background-color:{bg_color}")
+                if getattr(ch, "bold", False):
+                    styles.append("font-weight:bold")
+                if getattr(ch, "italics", False):
+                    styles.append("font-style:italic")
+
+                text_decoration = []
+                if getattr(ch, "underscore", False):
+                    text_decoration.append("underline")
+                if getattr(ch, "strikethrough", False):
+                    text_decoration.append("line-through")
+                if text_decoration:
+                    styles.append(f"text-decoration:{' '.join(text_decoration)}")
+
+                style_str = "; ".join(styles)
+
+                char_data = ch.data
+                if char_data == " ":
+                    char_data = "&nbsp;"
+                elif char_data == "<":
+                    char_data = "&lt;"
+                elif char_data == ">":
+                    char_data = "&gt;"
+                elif char_data == "&":
+                    char_data = "&amp;"
+                elif char_data == '"':
+                    char_data = "&quot;"
+                elif char_data == "'":
+                    char_data = "&#39;"
+
+                if style_str == last_style:
+                    current_span += char_data
+                else:
+                    if current_span:
+                        if last_style:
+                            html_line += (
+                                f'<span style="{last_style}">{current_span}</span>'
+                            )
+                        else:
+                            html_line += current_span
+                    current_span = char_data
+                    last_style = style_str
+
+            if current_span:
+                if last_style:
+                    html_line += f'<span style="{last_style}">{current_span}</span>'
+                else:
+                    html_line += current_span
+
+            if not html_line:
+                html_line = "&nbsp;"
+
+            html_lines.append(html_line)
+
+        div_lines = []
+        for html_line in html_lines:
+            div_lines.append(
+                f'<div style="margin: 0; padding: 0; line-height: 1.2;">{html_line}</div>'
+            )
+
+        body_style = (
+            f"background-color: {default_bg}; color: {default_fg}; "
+            "font-family: Consolas, monospace; font-size: 13px; "
+            "white-space: pre-wrap; margin: 0; padding: 0;"
+        )
+        full_html = (
+            f'<html><body style="{body_style}">{"".join(div_lines)}</body></html>'
+        )
+        screen.dirty.clear()
+
+        return full_html, screen.cursor.x, screen.cursor.y
 
     def stop(self):
         self.running = False
@@ -376,27 +634,18 @@ class CommandInput(QLineEdit):
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_Right:
             text = self.text()
-
             if not text:
                 return
-
-            if text.endswith(" "):
-                words = text.split()
-                last_word = ""
-            else:
-                words = text.split()
-                last_word = words[-1] if words else ""
-
+            words = text.split()
+            last_word = "" if text.endswith(" ") else (words[-1] if words else "")
             base_dir = self.get_current_dir() or os.path.expanduser("~")
             target_path = os.path.join(base_dir, last_word)
-
             if os.path.isdir(target_path) and last_word.endswith(("/", "\\")):
                 search_dir = target_path
                 prefix = ""
             else:
                 search_dir = os.path.dirname(target_path)
                 prefix = os.path.basename(target_path)
-
             if os.path.isdir(search_dir):
                 try:
                     items = sorted(os.listdir(search_dir))
@@ -404,39 +653,28 @@ class CommandInput(QLineEdit):
                     items = []
             else:
                 items = []
-
             matches = [
                 item for item in items if item.lower().startswith(prefix.lower())
             ]
-
             if matches:
                 best_match = matches[0]
-
                 rel_dir = os.path.dirname(last_word)
-
-                if rel_dir:
-                    completed_word = os.path.join(rel_dir, best_match).replace(
-                        "\\", "/"
-                    )
-                else:
-                    completed_word = best_match
-
+                completed_word = (
+                    os.path.join(rel_dir, best_match).replace("\\", "/")
+                    if rel_dir
+                    else best_match
+                )
                 if os.path.isdir(os.path.join(search_dir, best_match)):
                     completed_word += "/"
-
                 if text.endswith(" "):
                     self.setText(text + completed_word)
                 else:
                     words[-1] = completed_word
                     self.setText(" ".join(words))
-
                 self.setCursorPosition(len(self.text()))
-
             event.accept()
             return
-
         modifiers = event.modifiers()
-
         if modifiers == Qt.ControlModifier:
             if event.key() == Qt.Key_C and not self.hasSelectedText():
                 self.term.push("\x03")
@@ -447,29 +685,22 @@ class CommandInput(QLineEdit):
             elif event.key() == Qt.Key_L:
                 self.term.push("\x0c")
                 return
-
         if modifiers in (Qt.NoModifier, Qt.KeypadModifier):
             if event.key() == Qt.Key_Up:
                 if self.history_index == len(self.history):
                     self.current_draft = self.text()
-
                 if self.history_index > 0:
                     self.history_index -= 1
                     self.setText(self.history[self.history_index])
-
                 return
-
             elif event.key() == Qt.Key_Down:
                 if self.history_index < len(self.history) - 1:
                     self.history_index += 1
                     self.setText(self.history[self.history_index])
-
                 elif self.history_index == len(self.history) - 1:
                     self.history_index += 1
                     self.setText(self.current_draft)
-
                 return
-
         super().keyPressEvent(event)
 
 
@@ -580,7 +811,7 @@ class Terminal(QWidget):
         self.term._cmd = cmd
         if self.term.backend is None:
             self.term.clear()
-            self.term.appendPlainText(f"Terminal - {repr(cmd)}")
+            self.term.append(f"Terminal - {repr(cmd)}")
 
     def is_running(self):
         return self.term.backend is not None
@@ -604,7 +835,7 @@ class Terminal(QWidget):
     cmd = pyqtProperty(str, get_cmd, set_cmd)
 
 
-class _TerminalWidget(QPlainTextEdit):
+class _TerminalWidget(QTextEdit):
     def __init__(self, parent, cols=125, rows=50, **kwargs):
         self.backend = None
         self._cmd = ""
@@ -614,7 +845,6 @@ class _TerminalWidget(QPlainTextEdit):
         self._bg_color = pal.base().color().name()
         self._rows = rows
         self._cols = cols
-        self.output = collections.deque()
         super().__init__(parent)
         self.setSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.MinimumExpanding)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
@@ -622,7 +852,8 @@ class _TerminalWidget(QPlainTextEdit):
         self.scroll_bar = None
         self.setFont(QFont("Courier", 9))
         self.setFont(QFont("Monospace"))
-        self.setLineWrapMode(QPlainTextEdit.NoWrap)
+        self.setLineWrapMode(QTextEdit.NoWrap)
+        self.document().setDocumentMargin(0)
         fmt = QFontMetrics(self.font())
         char_width = (
             fmt.width("w") if hasattr(fmt, "width") else fmt.horizontalAdvance("w")
@@ -631,6 +862,8 @@ class _TerminalWidget(QPlainTextEdit):
         self.adjustSize()
         self.updateGeometry()
         self.update_stylesheet()
+
+        self.last_scroll_value = -1
 
     @property
     def bg_color(self):
@@ -652,7 +885,7 @@ class _TerminalWidget(QPlainTextEdit):
 
     def update_stylesheet(self):
         self.setStyleSheet(
-            f"QPlainTextEdit {{ border: 0; color: {theme.color26}; background-color: {theme.color2}; font-family: Consolas, monospace; font-size: 13px; }}"
+            f"QTextEdit {{ border: 0; color: {theme.color26}; background-color: {theme.color2}; font-family: Consolas, monospace; font-size: 13px; }}"
         )
 
     @property
@@ -684,11 +917,11 @@ class _TerminalWidget(QPlainTextEdit):
     def start(self, deactivate_ctrl_d: bool = False):
         self._deactivate_ctrl_d = deactivate_ctrl_d
         self.update_term_size()
-        self.screen = Screen(self.write, self.cols, self.rows, 10000)
-        self.stream = pyte.ByteStream()
-        self.stream.attach(self.screen)
+        self.last_scroll_value = -1
+
         self.backend = Backend(self._cmd, self.cols, self.rows)
-        self.backend.dataReady.connect(self.data_ready)
+        self.backend.htmlReady.connect(self.html_ready)
+        self.backend.scrollBarUpdate.connect(self.update_scroll_bar)
         self.backend.processExited.connect(self.process_exited)
         self.backend.start()
 
@@ -701,12 +934,24 @@ class _TerminalWidget(QPlainTextEdit):
         if hasattr(self.parent(), "closed"):
             self.parent().closed.emit()
 
-    @SafeSlot(bytes)
-    def data_ready(self, data):
-        self.stream.feed(data)
-        self.redraw_screen()
-        self.adjust_scroll_bar()
-        self.move_cursor()
+    @SafeSlot(str, int, int)
+    def html_ready(self, html, cursor_x, cursor_y):
+        self.setHtml(html)
+        self.move_cursor_to(cursor_x, cursor_y)
+
+    @SafeSlot(int)
+    def update_scroll_bar(self, max_val):
+        sb = self.scroll_bar
+        if sb is None:
+            return
+        try:
+            sb.valueChanged.disconnect(self.scroll_value_change)
+        except TypeError:
+            pass
+        sb.setMaximum(max_val)
+        sb.setSliderPosition(max_val)
+        self.last_scroll_value = max_val
+        sb.valueChanged.connect(self.scroll_value_change)
 
     def minimumSizeHint(self):
         fmt = QFontMetrics(self.font())
@@ -726,32 +971,18 @@ class _TerminalWidget(QPlainTextEdit):
         self.scroll_bar.setMinimum(0)
         self.scroll_bar.valueChanged.connect(self.scroll_value_change)
 
-    def scroll_value_change(self, value, old={"value": -1}):
+    def scroll_value_change(self, value):
         if self.backend is None:
             return
-        if old["value"] == -1:
-            old["value"] = self.scroll_bar.maximum()
-        if value <= old["value"]:
-            nlines = old["value"] - value
-            for i in range(nlines):
-                self.screen.prev_page()
-        else:
-            nlines = value - old["value"]
-            for i in range(nlines):
-                self.screen.next_page()
-        old["value"] = value
-        self.redraw_screen()
-
-    def adjust_scroll_bar(self):
-        sb = self.scroll_bar
-        try:
-            sb.valueChanged.disconnect(self.scroll_value_change)
-        except TypeError:
-            pass
-        tmp = len(self.screen.history.top) + len(self.screen.history.bottom)
-        sb.setMaximum(tmp if tmp > 0 else 0)
-        sb.setSliderPosition(tmp if tmp > 0 else 0)
-        sb.valueChanged.connect(self.scroll_value_change)
+        if self.last_scroll_value == -1:
+            self.last_scroll_value = self.scroll_bar.maximum()
+        if value < self.last_scroll_value:
+            for _ in range(self.last_scroll_value - value):
+                self.backend.prev_page()
+        elif value > self.last_scroll_value:
+            for _ in range(value - self.last_scroll_value):
+                self.backend.next_page()
+        self.last_scroll_value = value
 
     def write(self, data):
         if self.backend and self.backend.running:
@@ -761,6 +992,14 @@ class _TerminalWidget(QPlainTextEdit):
     def keyPressEvent(self, event):
         if self.backend is None:
             return
+        if event.modifiers() == Qt.ControlModifier and event.key() == Qt.Key_C:
+            if self.textCursor().hasSelection():
+                self.copy()
+
+                cursor = self.textCursor()
+                cursor.clearSelection()
+                self.setTextCursor(cursor)
+                return
         code = QtKeyToAscii(event)
         if code == "copy":
             self.copy()
@@ -768,9 +1007,6 @@ class _TerminalWidget(QPlainTextEdit):
             if isinstance(self.parent(), Terminal):
                 self.parent().input_field.setFocus()
                 self.parent().input_field.event(event)
-
-    def push(self, text):
-        self.write(text.encode("utf-8"))
 
     def contextMenuEvent(self, event):
         if self.backend is None:
@@ -792,15 +1028,11 @@ class _TerminalWidget(QPlainTextEdit):
         clipboard = QApplication.instance().clipboard()
         self.push(clipboard.text())
 
-    def move_cursor(self):
+    def move_cursor_to(self, cursor_x, cursor_y):
         textCursor = self.textCursor()
         textCursor.setPosition(0)
-        textCursor.movePosition(
-            QTextCursor.Down, QTextCursor.MoveAnchor, self.screen.cursor.y
-        )
-        textCursor.movePosition(
-            QTextCursor.Right, QTextCursor.MoveAnchor, self.screen.cursor.x
-        )
+        textCursor.movePosition(QTextCursor.Down, QTextCursor.MoveAnchor, cursor_y)
+        textCursor.movePosition(QTextCursor.Right, QTextCursor.MoveAnchor, cursor_x)
         self.setTextCursor(textCursor)
 
     def mouseReleaseEvent(self, event):
@@ -815,31 +1047,12 @@ class _TerminalWidget(QPlainTextEdit):
             textCursor = self.textCursor()
             if not textCursor.selectedText():
                 self.scroll_bar.setSliderPosition(self.scroll_bar.maximum())
-                self.move_cursor()
+                if self.backend and self.backend.running:
+                    self.move_cursor_to(
+                        self.backend.screen.cursor.x, self.backend.screen.cursor.y
+                    )
                 return None
         return super().mouseReleaseEvent(event)
-
-    def redraw_screen(self):
-        screen = self.screen
-        if screen.dirty:
-            while len(self.output) < (max(screen.dirty) + 1):
-                self.output.append("")
-            while len(self.output) > (max(screen.dirty) + 1):
-                self.output.pop()
-            for line_no in screen.dirty:
-                line = ""
-                old_idx = 0
-                for idx, ch in screen.buffer[line_no].items():
-                    line += " " * (idx - old_idx - 1)
-                    old_idx = idx
-                    line += ch.data
-                if line_no == screen.cursor.y:
-                    llen = len(screen.buffer[line_no])
-                    if llen < screen.cursor.x:
-                        line += " " * (screen.cursor.x - llen)
-                self.output[line_no] = line
-            self.setPlainText(chr(10).join(self.output))
-            screen.dirty.clear()
 
     def update_term_size(self):
         fmt = QFontMetrics(self.font())
@@ -857,17 +1070,15 @@ class _TerminalWidget(QPlainTextEdit):
         self.update_term_size()
         if self.backend:
             self.backend.resize(self._rows, self._cols)
-            self.screen.resize(self._rows, self._cols)
-            self.redraw_screen()
-            self.adjust_scroll_bar()
-            self.move_cursor()
 
     def wheelEvent(self, event):
         if not self.backend:
             return
         y = event.angleDelta().y()
         if y > 0:
-            self.screen.prev_page()
+            self.backend.prev_page()
         else:
-            self.screen.next_page()
-        self.redraw_screen()
+            self.backend.next_page()
+
+    def push(self, text):
+        self.write(text.encode("utf-8"))

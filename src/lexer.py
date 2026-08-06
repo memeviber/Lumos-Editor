@@ -131,22 +131,54 @@ class BaseLexer(QsciLexerCustom):
         margin_color = self.theme_json.get("theme", {}).get("margin-color")
         if paper_color:
             bg_color = QColor(paper_color)
-            self.setDefaultPaper(bg_color)
-            if hasattr(self, "editor") and self.editor:
-                self.editor.setPaper(bg_color)
-                self.editor.setMarginsBackgroundColor(bg_color.darker(110))
-                self.editor.setMarginsForegroundColor(
-                    QColor(margin_color) if margin_color else bg_color.lighter(150)
-                )
         else:
-            self.setDefaultPaper(QColor(f"{theme.color5}"))
-            self.editor.setPaper(self.defaultPaper())
-            self.editor.setMarginsBackgroundColor(QColor(f"{theme.color1}"))
-            self.editor.setMarginsForegroundColor(QColor(f"{theme.color25}"))
-        self.editor.setStyleSheet(
-            f"""
+            bg_color = QColor(f"{theme.color5}")
+
+        is_light = bg_color.lightness() > 128
+        self.setDefaultPaper(bg_color)
+
+        if hasattr(self, "editor") and self.editor:
+            self.editor.setPaper(bg_color)
+
+            if paper_color:
+                margin_bg = bg_color.darker(105) if is_light else bg_color.darker(110)
+                self.editor.setMarginsBackgroundColor(margin_bg)
+
+                if margin_color:
+                    margin_fg = QColor(margin_color)
+                else:
+                    margin_fg = (
+                        bg_color.darker(160) if is_light else bg_color.lighter(150)
+                    )
+                self.editor.setMarginsForegroundColor(margin_fg)
+            else:
+                self.editor.setMarginsBackgroundColor(QColor(f"{theme.color1}"))
+                self.editor.setMarginsForegroundColor(QColor(f"{theme.color25}"))
+
+            if is_light:
+                item_view_bg = bg_color.darker(108).name()
+                item_view_selected_bg = bg_color.darker(118).name()
+                brace_bg = bg_color.darker(115)
+                fold_bg = bg_color.darker(105)
+                fold_fg = (
+                    QColor(margin_color).darker(110)
+                    if margin_color
+                    else bg_color.darker(150)
+                )
+            else:
+                item_view_bg = bg_color.lighter(110).name()
+                item_view_selected_bg = bg_color.lighter(130).name()
+                brace_bg = bg_color.lighter(120)
+                fold_bg = bg_color.darker(110)
+                fold_fg = (
+                    QColor(margin_color).lighter(150)
+                    if margin_color
+                    else bg_color.lighter(150)
+                )
+
+            self.editor.setStyleSheet(f"""
                     QAbstractItemView {{
-                        background-color: {bg_color.lighter(110).name()};
+                        background-color: {item_view_bg};
                         color: {self.color(self.DEFAULT).name()};
                         border: None;
                         border-radius: 4px;
@@ -154,34 +186,37 @@ class BaseLexer(QsciLexerCustom):
                         min-height: 28px;
                     }}
                     QAbstractItemView::item:selected {{
-                        background-color: {bg_color.lighter(130).name()};
+                        background-color: {item_view_selected_bg};
                         color: {self.color(self.DEFAULT).name()};
                     }}
-                """
-        )
-        self.editor.setMatchedBraceBackgroundColor(bg_color.lighter(120))
-        self.editor.setUnmatchedBraceBackgroundColor(bg_color.lighter(120))
-        fold_bg = bg_color.darker(110)
-        fold_fg = QColor(margin_color).lighter(150)
-        self.editor.setFoldMarginColors(fold_bg, fold_bg)
-        self.editor.setMarkerForegroundColor(fold_fg, 0)
-        self.editor.setMarkerForegroundColor(fold_fg, 1)
-        self.editor.setMarkerBackgroundColor(fold_bg, 0)
-        self.editor.setMarkerBackgroundColor(fold_bg, 1)
-        self.editor.markerDefine(
-            QsciScintilla.SC_MARK_ARROW, QsciScintilla.SC_MARKNUM_FOLDER
-        )
-        self.editor.markerDefine(
-            QsciScintilla.SC_MARK_ARROWDOWN, QsciScintilla.SC_MARKNUM_FOLDEROPEN
-        )
-        self.editor.setMarkerForegroundColor(fold_fg, QsciScintilla.SC_MARKNUM_FOLDER)
-        self.editor.setMarkerForegroundColor(
-            fold_fg, QsciScintilla.SC_MARKNUM_FOLDEROPEN
-        )
-        self.editor.setMarkerBackgroundColor(fold_bg, QsciScintilla.SC_MARKNUM_FOLDER)
-        self.editor.setMarkerBackgroundColor(
-            fold_bg, QsciScintilla.SC_MARKNUM_FOLDEROPEN
-        )
+                """)
+
+            self.editor.setMatchedBraceBackgroundColor(brace_bg)
+            self.editor.setUnmatchedBraceBackgroundColor(brace_bg)
+            self.editor.setFoldMarginColors(fold_bg, fold_bg)
+            self.editor.setMarkerForegroundColor(fold_fg, 0)
+            self.editor.setMarkerForegroundColor(fold_fg, 1)
+            self.editor.setMarkerBackgroundColor(fold_bg, 0)
+            self.editor.setMarkerBackgroundColor(fold_bg, 1)
+            self.editor.markerDefine(
+                QsciScintilla.SC_MARK_ARROW, QsciScintilla.SC_MARKNUM_FOLDER
+            )
+            self.editor.markerDefine(
+                QsciScintilla.SC_MARK_ARROWDOWN, QsciScintilla.SC_MARKNUM_FOLDEROPEN
+            )
+            self.editor.setMarkerForegroundColor(
+                fold_fg, QsciScintilla.SC_MARKNUM_FOLDER
+            )
+            self.editor.setMarkerForegroundColor(
+                fold_fg, QsciScintilla.SC_MARKNUM_FOLDEROPEN
+            )
+            self.editor.setMarkerBackgroundColor(
+                fold_bg, QsciScintilla.SC_MARKNUM_FOLDER
+            )
+            self.editor.setMarkerBackgroundColor(
+                fold_bg, QsciScintilla.SC_MARKNUM_FOLDEROPEN
+            )
+
         colors = self.theme_json.get("theme", {}).get("syntax", [])
         for clr in colors:
             name: str = list(clr.keys())[0]
