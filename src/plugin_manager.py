@@ -4,7 +4,6 @@ import threading
 import zipfile
 
 from PyQt5.QtCore import (
-    QEventLoop,
     QObject,
     QRunnable,
     Qt,
@@ -137,8 +136,10 @@ class _PluginLoadTask(QRunnable):
                     import shutil
 
                     shutil.rmtree(target)
-                else:
+                elif os.path.exists(target):
                     os.remove(target)
+                else:
+                    return False
                 return True
 
             def show_message(title, message):
@@ -157,41 +158,19 @@ class _PluginLoadTask(QRunnable):
                 return self.manager._call_main_thread("ask_text", title, label, default)
 
             def _get_editor_text():
-                active_tab = self.manager._get_active_editor_tab()
-                if (
-                    active_tab
-                    and isinstance(active_tab, EditorTab)
-                    and active_tab.editor
-                ):
-                    return active_tab.editor.text()
-                return None
+                return self.manager._call_main_thread("get_editor_text")
 
             def _set_editor_text(text):
-                active_tab = self.manager._get_active_editor_tab()
-                if (
-                    active_tab
-                    and isinstance(active_tab, EditorTab)
-                    and active_tab.editor
-                ):
-                    active_tab.editor.setText(str(text))
-                    if hasattr(active_tab, "is_modified"):
-                        active_tab.is_modified = True
-                    main_window = self.manager.parent_widget
-                    current_index = main_window.tabs.currentIndex()
-                    current_text = main_window.tabs.tabText(current_index)
-                    main_window.tabs.setTabText(current_index, "*" + current_text)
-                    return True
-                return False
+                return self.manager._call_main_thread("set_editor_text", text)
+
+            def _get_current_file():
+                return self.manager._call_main_thread("get_current_file")
+
+            def _is_file():
+                return self.manager._call_main_thread("is_file")
 
             def _is_saved():
-                active_tab = self.manager._get_active_editor_tab()
-                if (
-                    active_tab
-                    and hasattr(active_tab, "is_modified")
-                    and active_tab.is_modified is not None
-                ):
-                    return not active_tab.is_modified
-                return True
+                return self.manager._call_main_thread("is_saved")
 
             def _run_cmd_in_terminal(cmd):
                 return self.manager._call_main_thread("run_cmd_in_terminal", cmd)
@@ -210,8 +189,8 @@ class _PluginLoadTask(QRunnable):
                     "show_error": show_error,
                     "ask_yn_question": ask_yn_question,
                     "ask_text_input": ask_text_input,
-                    "get_current_file": self.manager._get_current_file,
-                    "is_file": self.manager._is_file,
+                    "get_current_file": _get_current_file,
+                    "is_file": _is_file,
                     "get_editor_text": _get_editor_text,
                     "set_editor_text": _set_editor_text,
                     "run_cmd_in_terminal": _run_cmd_in_terminal,
@@ -260,7 +239,7 @@ class PluginManager:
             with open(plugin_path, "rb") as f:
                 magic = f.read(4)
                 return magic == b"PK\x03\x04"
-        except:
+        except Exception:
             return False
 
     def _read_plugin_content(self, plugin_path, lexer=False):
@@ -276,14 +255,8 @@ class PluginManager:
                 )
                 if main_file in zf.namelist():
                     return zf.read(main_file).decode("utf-8")
-                else:
-                    return None
-        except Exception as e:
-            QMessageBox.warning(
-                self.parent_widget,
-                "Plugin Load Error",
-                f"Error reading plugin content: {e}",
-            )
+                return None
+        except Exception:
             return None
 
     def _scan_for_plugins(self):
@@ -296,9 +269,10 @@ class PluginManager:
                         if "manifest.json" not in zf.namelist():
                             QMessageBox.warning(
                                 self.parent_widget,
-                                "Plugin Load Error",
-                                "manifest.json not found in the plugin archive.",
+                                "Plugin Scan Warning",
+                                f"'manifest.json' not found in plugin archive: {filename}",
                             )
+                            continue
                         manifest_data = zf.read("manifest.json").decode("utf-8")
                         manifest = json.loads(manifest_data)
                         self.discovered_plugins[filename] = manifest
@@ -354,9 +328,49 @@ class PluginManager:
                 text=args[2] if len(args) > 2 else "",
             )
             return text if ok else None
+        if op == "get_editor_text":
+            active_tab = self._get_active_editor_tab()
+            if (
+                active_tab
+                and isinstance(active_tab, EditorTab)
+                and active_tab.editor
+            ):
+                return active_tab.editor.text()
+            return None
+        if op == "set_editor_text":
+            text = args[0]
+            active_tab = self._get_active_editor_tab()
+            if (
+                active_tab
+                and isinstance(active_tab, EditorTab)
+                and active_tab.editor
+            ):
+                active_tab.editor.setText(str(text))
+                if hasattr(active_tab, "is_modified"):
+                    active_tab.is_modified = True
+                main_window = self.parent_widget
+                current_index = main_window.tabs.currentIndex()
+                current_text = main_window.tabs.tabText(current_index)
+                if not current_text.startswith("*"):
+                    main_window.tabs.setTabText(current_index, "*" + current_text)
+                return True
+            return False
+        if op == "get_current_file":
+            return self._get_current_file()
+        if op == "is_file":
+            return self._is_file()
+        if op == "is_saved":
+            active_tab = self._get_active_editor_tab()
+            if (
+                active_tab
+                and hasattr(active_tab, "is_modified")
+                and active_tab.is_modified is not None
+            ):
+                return not active_tab.is_modified
+            return True
         if op == "create_action":
             menu_name, text, callback, shortcut, checkable, add_separator = args
-            if add_separator:
+            if add_separator and self._menus_ref:
                 menu = self._menus_ref.get(menu_name)
                 if menu and isinstance(menu, QMenu):
                     menu.addSeparator()
@@ -401,9 +415,9 @@ class PluginManager:
         except Exception as e:
             payload["error"] = e
         finally:
-            loop = payload.get("loop")
-            if loop and loop.isRunning():
-                loop.quit()
+            event = payload.get("event")
+            if event:
+                event.set()
 
     def _call_main_thread(self, op, *args):
         app = QApplication.instance()
@@ -414,10 +428,10 @@ class PluginManager:
             "args": args,
             "result": None,
             "error": None,
-            "loop": QEventLoop(),
+            "event": threading.Event(),
         }
         self._bridge.request.emit(payload)
-        payload["loop"].exec_()
+        payload["event"].wait()
         if payload["error"] is not None:
             raise payload["error"]
         return payload["result"]
@@ -429,6 +443,8 @@ class PluginManager:
         self._pending_tasks = 0
         self._running_tasks.clear()
         self.plugins_loaded = False
+        tasks_to_start = []
+
         for filename, manifest in self.discovered_plugins.items():
             if not self.config_manager.is_plugin_enabled(filename):
                 continue
@@ -454,11 +470,16 @@ class PluginManager:
                 task = _PluginLoadTask(self, filename, plugin_info)
                 task.signals.finished.connect(self._on_plugin_task_finished)
                 task.signals.failed.connect(self._on_plugin_task_failed)
-                self._running_tasks.append(task)
-                self._pending_tasks += 1
-                self._thread_pool.start(task)
+                tasks_to_start.append(task)
+
+        self._pending_tasks = len(tasks_to_start)
+        self._running_tasks.extend(tasks_to_start)
+
         if self._pending_tasks == 0:
             self.plugins_loaded = True
+        else:
+            for task in tasks_to_start:
+                self._thread_pool.start(task)
 
     def _on_plugin_task_finished(self, filename):
         self._pending_tasks -= 1
@@ -486,7 +507,9 @@ class PluginManager:
             self.hooks.setdefault(event_name, []).append(func)
 
     def trigger_hook(self, event_name, **kwargs):
-        for fn in list(self.hooks.get(event_name, [])):
+        with self._plugin_lock:
+            callbacks = list(self.hooks.get(event_name, []))
+        for fn in callbacks:
             try:
                 fn(**kwargs)
             except Exception as e:
@@ -575,7 +598,8 @@ class PluginManager:
 
     def unload_plugins(self):
         self.extension_map.clear()
-        self.hooks.clear()
+        with self._plugin_lock:
+            self.hooks.clear()
         if self._menus_ref:
             for item in self.menu_actions:
                 action = item.get("action")
@@ -587,7 +611,7 @@ class PluginManager:
         for item in self.menu_actions:
             try:
                 item["action"].deleteLater()
-            except:
+            except Exception:
                 pass
         self.menu_actions.clear()
         self.plugins_loaded = False
@@ -601,6 +625,9 @@ class PluginManager:
     def _load_lexer_from_plugin(self, plugin_info):
         if plugin_info.lexer_class:
             return plugin_info.lexer_class
+        lexer_class_name = plugin_info.manifest.get("lexerClass")
+        if not lexer_class_name:
+            return None
         try:
             plugin_content = self._read_plugin_content(plugin_info.zip_path, lexer=True)
             if not plugin_content:
@@ -617,34 +644,38 @@ class PluginManager:
                 }
             )
             exec(plugin_content, lexer_globals)
-            plugin_info.lexer_class = lexer_globals.get(
-                plugin_info.manifest["lexerClass"]
-            )
+            plugin_info.lexer_class = lexer_globals.get(lexer_class_name)
             return plugin_info.lexer_class
         except Exception as e:
+            plugin_name = plugin_info.manifest.get("name", "Unknown Plugin")
             QMessageBox.warning(
                 self.parent_widget,
                 "Plugin Load Error",
-                f"Could not load lexer for {plugin_info.manifest['name']}:\n\n{e}",
+                f"Could not load lexer for {plugin_name}:\n\n{e}",
             )
             return None
 
     def _load_icon_from_plugin(self, plugin_info):
         if plugin_info.icon:
             return plugin_info.icon
+        icon_file = plugin_info.manifest.get("iconFile")
+        if not icon_file:
+            return None
         try:
             with zipfile.ZipFile(plugin_info.zip_path, "r") as zf:
-                manifest = plugin_info.manifest
-                icon_data = zf.read(manifest["iconFile"])
+                if icon_file not in zf.namelist():
+                    return None
+                icon_data = zf.read(icon_file)
                 pixmap = QPixmap()
                 pixmap.loadFromData(icon_data)
                 plugin_info.icon = QIcon(pixmap)
                 return plugin_info.icon
         except Exception as e:
+            plugin_name = plugin_info.manifest.get("name", "Unknown Plugin")
             QMessageBox.warning(
                 self.parent_widget,
                 "Plugin Load Error",
-                f"Could not load icon for {plugin_info.manifest['name']}:\n\n{e}",
+                f"Could not load icon for {plugin_name}:\n\n{e}",
             )
             return None
 
@@ -692,7 +723,8 @@ class PluginDialog(QDialog):
     def populate_plugin_list(self):
         for filename, manifest in self.plugin_manager.discovered_plugins.items():
             item = QListWidgetItem(self.plugin_list_widget)
-            item.setText(f"{manifest['name']} ({filename})")
+            name = manifest.get("name", filename)
+            item.setText(f"{name} ({filename})")
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
             is_enabled = self.config_manager.is_plugin_enabled(filename)
             item.setCheckState(Qt.Checked if is_enabled else Qt.Unchecked)
