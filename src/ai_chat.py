@@ -545,6 +545,8 @@ class AIChat(QWidget):
                     sub_item = layout_to_clear.takeAt(0)
                     if sub_item.widget():
                         sub_item.widget().deleteLater()
+        self.current_session_id = None
+        self.current_session_name = None
 
     def add_user_message_widget(self, text):
         user_widget = UserMessageWidget(text)
@@ -1173,7 +1175,7 @@ WHEN USER SAYS "CODE ONLY"
 - Absolute silence outside the code itself.
 
 WHEN MULTIPLE FILES ARE NEEDED
-- Label each file with a plain comment header: // FILE: path/to/file.ext
+- Label each file with a plain comment header: [comment] FILE: path/to/file.ext
 - Separate files with a single blank line.
 - In CODE ONLY mode: use only the comment header - no fences.
 
