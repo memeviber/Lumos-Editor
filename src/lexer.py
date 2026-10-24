@@ -280,6 +280,7 @@ class PygmentsBaseLexer(BaseLexer):
         super().__init__(language_name, editor, theme_name=theme_name)
         self.pygments_lexer = None
         self.token_map = {}
+        self._token_style_cache = {}
 
     def _do_style_text(self, start: int, end: int):
         if not self.pygments_lexer or not self.token_map:
@@ -291,7 +292,9 @@ class PygmentsBaseLexer(BaseLexer):
         current_byte_pos = 0
 
         for ttype, value in tokens:
-            token_len_bytes = len(value.encode("utf-8"))
+            token_len_bytes = (
+                len(value) if value.isascii() else len(value.encode("utf-8"))
+            )
             token_end_pos = current_byte_pos + token_len_bytes
 
             if token_end_pos > start and current_byte_pos < end:
@@ -306,11 +309,18 @@ class PygmentsBaseLexer(BaseLexer):
                 break
 
     def _get_style_from_token(self, ttype):
-        while ttype in self.token_map:
-            return self.token_map[ttype]
+        if ttype in self._token_style_cache:
+            return self._token_style_cache[ttype]
+        if ttype in self.token_map:
+            style = self.token_map[ttype]
+            self._token_style_cache[ttype] = style
+            return style
         if ttype.parent:
-            return self._get_style_from_token(ttype.parent)
-        return self.DEFAULT
+            style = self._get_style_from_token(ttype.parent)
+        else:
+            style = self.DEFAULT
+        self._token_style_cache[ttype] = style
+        return style
 
 
 all_keywords = keyword.kwlist.copy()
@@ -339,6 +349,8 @@ class PythonLexer(PygmentsBaseLexer):
     def __init__(self, editor, theme_name="default"):
         super().__init__("Python", editor, theme_name=theme_name)
         self.pygments_lexer = CustomPyG_PythonLexer()
+        self._jedi_script = None
+        self._jedi_script_code = None
         self.token_map = {
             Token.Text: self.DEFAULT,
             Token.Whitespace: self.DEFAULT,
@@ -381,7 +393,10 @@ class PythonLexer(PygmentsBaseLexer):
             self.apis.prepare()
             return
         try:
-            script = jedi.Script(code=code)
+            if self._jedi_script is None or self._jedi_script_code != code:
+                self._jedi_script = jedi.Script(code=code)
+                self._jedi_script_code = code
+            script = self._jedi_script
             completions = script.complete(line + 1, col)
             for completion in completions:
                 self.apis.add(completion.name)

@@ -3,14 +3,7 @@ import os
 import threading
 import zipfile
 
-from PyQt5.QtCore import (
-    QObject,
-    QRunnable,
-    Qt,
-    QThread,
-    QThreadPool,
-    pyqtSignal,
-)
+from PyQt5.QtCore import QObject, QRunnable, Qt, QThread, QThreadPool, pyqtSignal
 from PyQt5.QtGui import QIcon, QKeySequence, QPixmap
 from PyQt5.QtWidgets import (
     QAction,
@@ -330,21 +323,13 @@ class PluginManager:
             return text if ok else None
         if op == "get_editor_text":
             active_tab = self._get_active_editor_tab()
-            if (
-                active_tab
-                and isinstance(active_tab, EditorTab)
-                and active_tab.editor
-            ):
+            if active_tab and isinstance(active_tab, EditorTab) and active_tab.editor:
                 return active_tab.editor.text()
             return None
         if op == "set_editor_text":
             text = args[0]
             active_tab = self._get_active_editor_tab()
-            if (
-                active_tab
-                and isinstance(active_tab, EditorTab)
-                and active_tab.editor
-            ):
+            if active_tab and isinstance(active_tab, EditorTab) and active_tab.editor:
                 active_tab.editor.setText(str(text))
                 if hasattr(active_tab, "is_modified"):
                     active_tab.is_modified = True
