@@ -17,6 +17,7 @@ from PyQt5.QtCore import (
 from PyQt5.QtGui import QColor, QFont, QIcon, QKeySequence, QPainter, QPen, QPixmap
 from PyQt5.QtWidgets import (
     QAbstractItemView,
+    QAbstractItemDelegate,
     QAction,
     QActionGroup,
     QApplication,
@@ -28,7 +29,6 @@ from PyQt5.QtWidgets import (
     QFrame,
     QGraphicsDropShadowEffect,
     QHBoxLayout,
-    QInputDialog,
     QLabel,
     QLineEdit,
     QMenu,
@@ -39,6 +39,7 @@ from PyQt5.QtWidgets import (
     QSizeGrip,
     QSizePolicy,
     QSplitter,
+    QStyle,
     QStackedWidget,
     QStatusBar,
     QTabBar,
@@ -74,6 +75,38 @@ from src.theme_manager import theme
 
 RADIUS = 8
 SHADOW_PADDING = 20
+
+
+class ExplorerFileTreeDelegate(FileTreeDelegate):
+    def initStyleOption(self, option, index):
+        super().initStyleOption(option, index)
+        option.state &= ~QStyle.State_HasFocus
+
+    def createEditor(self, parent, option, index):
+        editor = super().createEditor(parent, option, index)
+        if isinstance(editor, QLineEdit):
+            editor.setFrame(False)
+            editor.setContentsMargins(0, 0, 0, 0)
+            editor.setTextMargins(0, 0, 0, 0)
+            editor.setStyleSheet(
+                f"""
+                QLineEdit {{
+                    background-color: {theme.color2};
+                    color: {theme.color27};
+                    border: 0px;
+                    outline: 0px;
+                    padding: 0px;
+                    margin: 0px;
+                    selection-background-color: {theme.color44};
+                    selection-color: {theme.color27};
+                }}
+                QLineEdit:focus {{
+                    border: 0px;
+                    outline: 0px;
+                }}
+                """
+            )
+        return editor
 
 
 class BorderOverlay(QWidget):
@@ -545,7 +578,7 @@ class MainWindow(QWidget):
         self.splitter.setSizes([0, self.width()])
         self.file_tree = FileTreeView(self, self.plugin_manager)
         self.fs_model.setReadOnly(False)
-        self.file_tree.setFocusPolicy(Qt.NoFocus)
+        self.file_tree.setFocusPolicy(Qt.StrongFocus)
         self.file_tree.setModel(self.fs_model)
         self.file_tree.setRootIndex(self.fs_model.index(""))
         self.file_tree.setEditTriggers(QTreeView.EditTrigger.NoEditTriggers)
@@ -568,8 +601,27 @@ class MainWindow(QWidget):
             QDir.NoDotAndDotDot | QDir.AllDirs | QDir.Files | QDir.Drives
         )
         self.file_tree.setIconSize(QSize(16, 16))
-        self.tree_delegate = FileTreeDelegate(self.file_tree, self.plugin_manager)
+        self.tree_delegate = ExplorerFileTreeDelegate(
+            self.file_tree, self.plugin_manager
+        )
         self.file_tree.setItemDelegate(self.tree_delegate)
+        self.file_tree.setEditTriggers(QTreeView.EditTrigger.EditKeyPressed)
+        self.tree_delegate.closeEditor.connect(self.on_tree_editor_closed)
+        self.fs_model.fileRenamed.connect(self.on_file_tree_item_renamed)
+        self._pending_inline_creation_path = None
+        self._active_tree_edit_path = None
+        self.file_tree_shortcuts = []
+        for key, handler in (
+            ("F2", self.rename_selected_tree_item),
+            ("Delete", self.delete_selected_tree_item),
+            ("Ctrl+C", self.copy_selected_tree_item),
+            ("Ctrl+X", self.cut_selected_tree_item),
+            ("Ctrl+V", self.paste_into_selected_tree_item),
+        ):
+            shortcut = QShortcut(QKeySequence(key), self.file_tree)
+            shortcut.setContext(Qt.WidgetShortcut)
+            shortcut.activated.connect(handler)
+            self.file_tree_shortcuts.append(shortcut)
         self.left_stack.addWidget(self.file_tree)
         self.setup_search_panel()
         self.left_stack.addWidget(self.search_panel)
@@ -583,6 +635,16 @@ class MainWindow(QWidget):
                 color: {theme.color27};
                 selection-background-color: transparent;
                 padding-left: 5px;
+            }}
+            QTreeView QLineEdit {{
+                background-color: {theme.color2};
+                color: {theme.color27};
+                border: none;
+                border-radius: 0px;
+                outline: none;
+                padding: 0px;
+                selection-background-color: {theme.color44};
+                selection-color: {theme.color27};
             }}
             QTreeView::item {{
                 padding: 4px;
@@ -1836,20 +1898,13 @@ class MainWindow(QWidget):
         else:
             path = self.current_project_dir
         self.show_status_message(f"Folder - {path}")
-        file_name, ok = QInputDialog.getText(
-            self, "New File", "Enter file name:", QLineEdit.Normal, ""
-        )
-        if ok and file_name:
-            file_path = os.path.join(path, file_name)
-            if os.path.exists(file_path):
-                QMessageBox.warning(self, "Error", "File already exists!")
-                return
-            try:
-                with open(file_path, "w", encoding="utf-8") as f:
-                    f.write("")
-                self.open_specific_file(file_path)
-            except Exception as e:
-                QMessageBox.warning(self, "Error", f"Could not create file: {str(e)}")
+        try:
+            file_path = self.get_unique_tree_item_path(path, "New File")
+            with open(file_path, "w", encoding="utf-8"):
+                pass
+            self.begin_inline_tree_item_creation(file_path)
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Could not create file: {str(e)}")
 
     def create_new_folder(self, index):
         if not self.check_path_exists():
@@ -1861,21 +1916,132 @@ class MainWindow(QWidget):
         else:
             path = self.current_project_dir
         self.show_status_message(f"Folder - {path}")
-        folder_name, ok = QInputDialog.getText(
-            self, "New Folder", "Enter folder name:", QLineEdit.Normal, ""
+        try:
+            folder_path = self.get_unique_tree_item_path(path, "New Folder")
+            os.mkdir(folder_path)
+            self.begin_inline_tree_item_creation(folder_path)
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Could not create folder: {str(e)}")
+
+    @staticmethod
+    def get_unique_tree_item_path(parent_path, base_name):
+        candidate = os.path.join(parent_path, base_name)
+        suffix = 1
+        while os.path.exists(candidate):
+            candidate = os.path.join(parent_path, f"{base_name} {suffix}")
+            suffix += 1
+        return candidate
+
+    def begin_inline_tree_item_creation(self, path):
+        self._pending_inline_creation_path = os.path.abspath(path)
+        self._active_tree_edit_path = os.path.abspath(path)
+        self.edit_tree_item_when_ready(path)
+
+    def edit_tree_item_when_ready(self, path, attempts=20):
+        index = self.fs_model.index(path)
+        if index.isValid():
+            parent_index = index.parent()
+            if parent_index.isValid():
+                self.file_tree.expand(parent_index)
+            self.file_tree.setCurrentIndex(index)
+            self.file_tree.edit(index)
+            return
+        if attempts > 0:
+            QTimer.singleShot(
+                50, lambda: self.edit_tree_item_when_ready(path, attempts - 1)
+            )
+        else:
+            QMessageBox.warning(
+                self, "Error", f"Could not edit the new item name: {path}"
+            )
+
+    def on_file_tree_item_renamed(self, parent_path, old_name, new_name):
+        old_path = os.path.join(parent_path, old_name)
+        new_path = os.path.join(parent_path, new_name)
+        is_new_item = (
+            self._pending_inline_creation_path
+            and os.path.abspath(old_path) == self._pending_inline_creation_path
         )
-        if ok and folder_name:
-            folder_path = os.path.join(path, folder_name)
-            try:
-                os.makedirs(folder_path)
-            except Exception as e:
-                QMessageBox.warning(self, "Error", f"Could not create folder: {str(e)}")
+        self.close_file_tab(old_path)
+        if is_new_item:
+            self._pending_inline_creation_path = None
+            self._active_tree_edit_path = None
+            if os.path.isfile(new_path):
+                self.open_specific_file(new_path)
+
+    def on_tree_editor_closed(self, editor, hint):
+        edit_path = self._active_tree_edit_path
+        if not edit_path:
+            return
+        pending_path = self._pending_inline_creation_path
+        self._active_tree_edit_path = None
+        if hint == QAbstractItemDelegate.EndEditHint.RevertModelCache:
+            if pending_path == edit_path:
+                self._pending_inline_creation_path = None
+                try:
+                    if os.path.isdir(pending_path):
+                        os.rmdir(pending_path)
+                    elif os.path.exists(pending_path):
+                        os.remove(pending_path)
+                except OSError as e:
+                    QMessageBox.warning(
+                        self, "Error", f"Could not cancel item creation: {str(e)}"
+                    )
+            return
+        old_name = os.path.basename(edit_path)
+        requested_name = editor.text()
+        if os.path.exists(edit_path) and requested_name != old_name:
+            target_path = os.path.join(os.path.dirname(edit_path), requested_name)
+            if pending_path == edit_path:
+                message = (
+                    f"An item named '{requested_name}' already exists."
+                    if os.path.exists(target_path)
+                    else f"Could not create item '{requested_name}'."
+                )
+                QMessageBox.warning(self, "Error", message)
+                self._active_tree_edit_path = edit_path
+                self.edit_tree_item_when_ready(edit_path)
+            else:
+                message = (
+                    f"An item named '{requested_name}' already exists."
+                    if os.path.exists(target_path)
+                    else f"Could not rename item to '{requested_name}'."
+                )
+                QMessageBox.warning(self, "Error", message)
+            return
+        if pending_path == edit_path:
+            self._pending_inline_creation_path = None
+            if os.path.isfile(edit_path):
+                self.open_specific_file(edit_path)
 
     def copy_item(self, index):
         path = self.fs_model.filePath(index)
         self.show_status_message(f"Folder - {os.path.dirname(path)}")
         self.clipboard_path = path
         self.clipboard_operation = "copy"
+
+    def rename_selected_tree_item(self):
+        index = self.file_tree.currentIndex()
+        if index.isValid():
+            self.rename_item(index)
+
+    def delete_selected_tree_item(self):
+        index = self.file_tree.currentIndex()
+        if index.isValid():
+            self.delete_item(index)
+
+    def copy_selected_tree_item(self):
+        index = self.file_tree.currentIndex()
+        if index.isValid():
+            self.copy_item(index)
+
+    def cut_selected_tree_item(self):
+        index = self.file_tree.currentIndex()
+        if index.isValid():
+            self.cut_item(index)
+
+    def paste_into_selected_tree_item(self):
+        self.paste_item(self.file_tree.currentIndex())
 
     def cut_item(self, index):
         path = self.fs_model.filePath(index)
@@ -1957,17 +2123,9 @@ class MainWindow(QWidget):
             return
         old_path = self.fs_model.filePath(index)
         self.show_status_message(f"Folder - {os.path.dirname(old_path)}")
-        old_name = os.path.basename(old_path)
-        new_name, ok = QInputDialog.getText(
-            self, "Rename", "Enter new name:", QLineEdit.Normal, old_name
-        )
-        if ok and new_name and new_name != old_name:
-            try:
-                new_path = os.path.join(os.path.dirname(old_path), new_name)
-                self.close_file_tab(old_path)
-                os.rename(old_path, new_path)
-            except Exception as e:
-                QMessageBox.warning(self, "Error", f"Could not rename: {str(e)}")
+        self._active_tree_edit_path = os.path.abspath(old_path)
+        self.file_tree.setCurrentIndex(index)
+        self.file_tree.edit(index)
 
     def on_tab_changed(self, index):
         if self.active_tab_widget:
