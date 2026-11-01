@@ -74,6 +74,7 @@ from src.message_box import QMessageBox
 from src.themed_dialog import (
     ThemedFileDialog as QFileDialog,
     ThemedInputDialog as QInputDialog,
+    set_input_placeholder_color,
 )
 
 RADIUS = 8
@@ -2335,7 +2336,7 @@ class MainWindow(QWidget):
         input_layout.setSpacing(6)
         input_style = f"""
             QLineEdit {{
-                background: {theme.color13};
+                background: {theme.color1};
                 color: {theme.color26};
                 border: 1px solid {theme.color13};
                 border-radius: 3px;
@@ -2344,7 +2345,7 @@ class MainWindow(QWidget):
             }}
             QLineEdit:focus {{
                 border: 1px solid {theme.color36};
-                background: {theme.color13};
+                background: {theme.color1};
             }}
         """
         search_row = QHBoxLayout()
@@ -2361,6 +2362,7 @@ class MainWindow(QWidget):
         self.search_proj_input = QLineEdit()
         self.search_proj_input.setPlaceholderText("Search")
         self.search_proj_input.setStyleSheet(input_style)
+        set_input_placeholder_color(self.search_proj_input)
         self.search_proj_input.returnPressed.connect(self.do_project_search)
         self.match_case_cb = QCheckBox("Aa")
         self.match_case_cb.setToolTip("Match Case")
@@ -2383,6 +2385,7 @@ class MainWindow(QWidget):
         self.replace_proj_input = QLineEdit()
         self.replace_proj_input.setPlaceholderText("Replace with...")
         self.replace_proj_input.setStyleSheet(input_style)
+        set_input_placeholder_color(self.replace_proj_input)
         replace_input_row.addWidget(self.replace_proj_input)
         replace_btn_row = QHBoxLayout()
         replace_btn_row.setSpacing(5)

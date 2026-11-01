@@ -1,5 +1,5 @@
 from PyQt5.QtCore import QEvent, QSize, Qt, pyqtSignal
-from PyQt5.QtGui import QFont, QIcon
+from PyQt5.QtGui import QColor, QFont, QIcon, QPalette
 from PyQt5.QtWidgets import (
     QComboBox,
     QDialog,
@@ -8,7 +8,6 @@ from PyQt5.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QListView,
     QSizePolicy,
     QTextEdit,
     QToolButton,
@@ -17,6 +16,42 @@ from PyQt5.QtWidgets import (
 )
 
 from .theme_manager import theme
+
+
+def themed_input_stylesheet(
+    selector,
+    background_color=None,
+    padding="5px",
+    border=None,
+    focus_border=None,
+    border_radius="4px",
+):
+    background_color = background_color or theme.color1
+    border = border or f"1px solid {theme.color13}"
+    focus_border = focus_border or f"1px solid {theme.color35}"
+    focus_selectors = ", ".join(
+        f"{item.strip()}:focus" for item in selector.split(",")
+    )
+    return f"""
+        {selector} {{
+            background-color: {background_color};
+            color: {theme.color27};
+            border: {border};
+            border-radius: {border_radius};
+            padding: {padding};
+            selection-background-color: {theme.color35};
+            selection-color: {theme.color31};
+        }}
+        {focus_selectors} {{
+            border: {focus_border};
+        }}
+    """
+
+
+def set_input_placeholder_color(widget):
+    palette = widget.palette()
+    palette.setColor(QPalette.PlaceholderText, QColor(theme.color26))
+    widget.setPalette(palette)
 
 
 def themed_dialog_stylesheet(dialog_selector):
@@ -31,15 +66,7 @@ def themed_dialog_stylesheet(dialog_selector):
             color: {theme.color27};
             background: transparent;
         }}
-        QLineEdit, QComboBox, QTextEdit, QListView, QTreeView {{
-            background-color: {theme.color1};
-            color: {theme.color27};
-            border: 1px solid {theme.color13};
-            border-radius: 4px;
-            padding: 5px;
-            selection-background-color: {theme.color35};
-            selection-color: {theme.color31};
-        }}
+        {themed_input_stylesheet("QLineEdit, QComboBox, QTextEdit, QListView, QTreeView")}
         QHeaderView::section {{
             background-color: {theme.color7};
             color: {theme.color27};
@@ -242,6 +269,7 @@ class ThemedInputDialog(QDialog):
             self._content_layout.removeWidget(self._input_widget)
             self._input_widget.deleteLater()
         self._input_widget = QLineEdit(self)
+        set_input_placeholder_color(self._input_widget)
         self._content_layout.addWidget(self._input_widget)
 
     def setTextValue(self, text):
@@ -258,6 +286,7 @@ class ThemedInputDialog(QDialog):
             self._content_layout.removeWidget(self._input_widget)
             self._input_widget.deleteLater()
         self._input_widget = QComboBox(self)
+        set_input_placeholder_color(self._input_widget)
         self._input_widget.addItems(items)
         self._input_widget.setEditable(editable)
         if items:
@@ -269,6 +298,7 @@ class ThemedInputDialog(QDialog):
             self._content_layout.removeWidget(self._input_widget)
             self._input_widget.deleteLater()
         self._input_widget = QTextEdit(self)
+        set_input_placeholder_color(self._input_widget)
         self._input_widget.setPlainText(text)
         self._input_widget.setMinimumSize(360, 120)
         self._content_layout.addWidget(self._input_widget)

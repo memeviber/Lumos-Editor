@@ -15,7 +15,12 @@ from PyQt5.QtWidgets import (
 )
 
 from .message_box import QMessageBox
-from .themed_dialog import ThemedDialogTitleBar, themed_dialog_stylesheet
+from .themed_dialog import (
+    ThemedDialogTitleBar,
+    set_input_placeholder_color,
+    themed_dialog_stylesheet,
+    themed_input_stylesheet,
+)
 
 
 class FindReplaceDialog(QDialog):
@@ -41,8 +46,18 @@ class FindReplaceDialog(QDialog):
         layout.setVerticalSpacing(10)
         self.find_label = QLabel("Find:")
         self.find_input = QLineEdit()
+        self.find_input.setPlaceholderText("Search")
+        self.find_input.setStyleSheet(
+            themed_input_stylesheet("QLineEdit") + "QLineEdit { font-size: 12px; }"
+        )
+        set_input_placeholder_color(self.find_input)
         self.replace_label = QLabel("Replace:")
         self.replace_input = QLineEdit()
+        self.replace_input.setPlaceholderText("Replace with...")
+        self.replace_input.setStyleSheet(
+            themed_input_stylesheet("QLineEdit") + "QLineEdit { font-size: 12px; }"
+        )
+        set_input_placeholder_color(self.replace_input)
         self.case_checkbox = QCheckBox("Case sensitive")
         self.find_btn = QPushButton("Find Next")
         self.replace_btn = QPushButton("Replace")

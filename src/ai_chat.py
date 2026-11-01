@@ -33,6 +33,8 @@ from .message_box import QMessageBox
 from .themed_dialog import (
     ThemedFileDialog as QFileDialog,
     ThemedInputDialog as QInputDialog,
+    set_input_placeholder_color,
+    themed_input_stylesheet,
 )
 from .theme_manager import theme
 
@@ -369,18 +371,10 @@ class AIChat(QWidget):
         header_layout.addWidget(self.session_button)
         self.search_box = QLineEdit()
         self.search_box.setPlaceholderText("Search chats...")
-        self.search_box.setStyleSheet(f"""
-        QLineEdit {{
-            background-color: {theme.color1};
-            border: 1px solid {theme.color12};
-            padding: 4px 8px;
-            border-radius: 4px;
-            color: {theme.color27};
-        }}
-        QLineEdit:focus {{
-            border: 1px solid {theme.color35};
-        }}
-        """)
+        self.search_box.setStyleSheet(
+            themed_input_stylesheet("QLineEdit", padding="4px 8px")
+        )
+        set_input_placeholder_color(self.search_box)
         self.search_box.textChanged.connect(self.search_sessions)
         header_layout.insertWidget(0, self.search_box)
         self.new_button = QPushButton("New Chat")
@@ -453,18 +447,16 @@ class AIChat(QWidget):
         self.input_text.setPlaceholderText(
             "Ask AI to generate or modify code... (Enter for a new line, press Ctrl+Enter to send)"
         )
-        self.input_text.setStyleSheet(f"""
-            QTextEdit {{ 
-                color: {theme.color27}; 
-                background-color: {theme.color1}; 
-                border: 1px solid {theme.color12}; 
-                padding: 4px 6px; 
-                border-radius: 4px; 
+        self.input_text.setStyleSheet(
+            themed_input_stylesheet("QTextEdit", padding="4px 6px")
+            + """
+            QTextEdit {
                 min-height: 20px;
-                max-height: 100px; 
-            }}
-            QTextEdit:focus {{ border: 1px solid {theme.color35}; }}
-            """)
+                max-height: 100px;
+            }
+            """
+        )
+        set_input_placeholder_color(self.input_text)
         self.input_text.setMinimumHeight(40)
         self.input_text.setMaximumHeight(100)
         self.input_text.send_requested.connect(self.send_message)

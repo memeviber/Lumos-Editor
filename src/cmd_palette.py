@@ -12,6 +12,7 @@ from PyQt5.QtWidgets import (
 )
 
 from .theme_manager import theme
+from .themed_dialog import set_input_placeholder_color, themed_input_stylesheet
 
 
 class CommandPalette(QDialog):
@@ -38,19 +39,18 @@ class CommandPalette(QDialog):
         container_layout.setSpacing(0)
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Type a command...")
-        self.search_input.setStyleSheet(f"""
-            QLineEdit {{
-                background-color: transparent;
-                color: {theme.color27};
-                padding: 12px 16px;
-                border: none;
-                border-bottom: 1px solid {theme.color13};
-                font-size: 14px;
-            }}
-            QLineEdit:focus {{
-                border-bottom: 1px solid {theme.color35};
-            }}
-        """)
+        self.search_input.setStyleSheet(
+            themed_input_stylesheet(
+                "QLineEdit",
+                background_color="transparent",
+                padding="12px 16px",
+                border=f"none; border-bottom: 1px solid {theme.color13}",
+                focus_border=f"none; border-bottom: 1px solid {theme.color35}",
+                border_radius="0px",
+            )
+            + "QLineEdit { font-size: 14px; }"
+        )
+        set_input_placeholder_color(self.search_input)
         container_layout.addWidget(self.search_input)
         self.list_widget = QListWidget()
         self.list_widget.setStyleSheet(f"""
