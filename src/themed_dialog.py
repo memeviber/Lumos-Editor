@@ -6,6 +6,7 @@ from PyQt5.QtWidgets import (
     QDialogButtonBox,
     QFileDialog,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QLineEdit,
     QSizePolicy,
@@ -66,6 +67,19 @@ def themed_dialog_stylesheet(dialog_selector):
             color: {theme.color27};
             background: transparent;
         }}
+        QToolButton {{
+            background-color: transparent;
+            color: {theme.color27};
+            border: 1px solid transparent;
+            border-radius: 4px;
+        }}
+        QToolButton:hover {{
+            background-color: {theme.color9};
+            border-color: {theme.color13};
+        }}
+        QToolButton:pressed {{
+            background-color: {theme.color11};
+        }}
         {themed_input_stylesheet("QLineEdit, QComboBox, QTextEdit, QListView, QTreeView")}
         QHeaderView::section {{
             background-color: {theme.color7};
@@ -73,10 +87,28 @@ def themed_dialog_stylesheet(dialog_selector):
             border: 1px solid {theme.color13};
             padding: 4px;
         }}
+        QComboBox::drop-down {{
+            background-color: {theme.color7};
+            border: none;
+            border-left: 1px solid {theme.color13};
+            width: 22px;
+        }}
+        QComboBox::down-arrow {{
+            image: url(resources:/chevron-down.png);
+            width: 12px;
+            height: 12px;
+        }}
         QComboBox QAbstractItemView {{
             background-color: {theme.color2};
             color: {theme.color27};
+            border: 1px solid {theme.color13};
+            outline: 0;
             selection-background-color: {theme.color9};
+            selection-color: {theme.color27};
+        }}
+        QComboBox QAbstractItemView::item:hover {{
+            background-color: {theme.color9};
+            color: {theme.color27};
         }}
         QCheckBox {{
             color: {theme.color27};
@@ -395,9 +427,50 @@ class ThemedFileDialog(QDialog):
         self.file_dialog.setOptions(options | QFileDialog.DontUseNativeDialog)
         self.file_dialog.setWindowFlags(Qt.Widget)
         self.file_dialog.setStyleSheet(themed_dialog_stylesheet("QFileDialog"))
+        self._apply_file_dialog_palette()
         layout.addWidget(self.file_dialog, 1)
         self.file_dialog.accepted.connect(self.accept)
         self.file_dialog.rejected.connect(self.reject)
+
+    def _apply_file_dialog_palette(self):
+        palette = self.file_dialog.palette()
+        for role, color in (
+            (QPalette.Window, theme.color2),
+            (QPalette.Base, theme.color2),
+            (QPalette.AlternateBase, theme.color7),
+            (QPalette.Text, theme.color27),
+            (QPalette.WindowText, theme.color27),
+            (QPalette.Button, theme.color7),
+            (QPalette.ButtonText, theme.color27),
+            (QPalette.Highlight, theme.color9),
+            (QPalette.HighlightedText, theme.color27),
+        ):
+            palette.setColor(role, QColor(color))
+        self.file_dialog.setPalette(palette)
+
+        for combo_box in self.file_dialog.findChildren(QComboBox):
+            combo_box.setPalette(palette)
+            popup_view = combo_box.view()
+            popup_view.setPalette(palette)
+            popup_view.setAutoFillBackground(True)
+            popup_window = popup_view.window()
+            popup_window.setPalette(palette)
+            popup_window.setAutoFillBackground(True)
+            popup_window.setStyleSheet(
+                "QFrame {"
+                f"background-color: {theme.color2};"
+                f"color: {theme.color27};"
+                f"border: 1px solid {theme.color13};"
+                "}"
+            )
+
+        for header in self.file_dialog.findChildren(QHeaderView):
+            header.setPalette(palette)
+            header.setStyleSheet(
+                "QHeaderView {"
+                f"color: {theme.color27};"
+                "}"
+            )
 
     @classmethod
     def getOpenFileName(

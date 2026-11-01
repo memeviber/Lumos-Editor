@@ -3,6 +3,7 @@
         "name": "github-dark",
         "paper-color": "#0d1117",
         "margin-color": "#30363d",
+        "accent-color": "#1F6FEB",
         "version": "1.0",
         "syntax": [
             {

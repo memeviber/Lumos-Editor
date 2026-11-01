@@ -3,6 +3,7 @@
         "name": "default",
         "paper-color": "#111318",
         "margin-color": "#6B7280",
+        "accent-color": "#596FD0",
         "version": "1.0",
         "syntax": [
             {

@@ -4,6 +4,7 @@
         "version": "1.0",
         "paper-color": "#FAFAFA",
         "margin-color": "#A0A1A7",
+        "accent-color": "#2457C5",
         "syntax": [
             {
                 "default": {

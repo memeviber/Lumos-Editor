@@ -1,3 +1,4 @@
+import logging
 import os
 import sys
 from functools import partial
@@ -79,6 +80,7 @@ from src.themed_dialog import (
 
 RADIUS = 8
 SHADOW_PADDING = 20
+logger = logging.getLogger(__name__)
 
 
 class ExplorerFileTreeDelegate(FileTreeDelegate):
@@ -487,6 +489,8 @@ class MainWindow(QWidget):
         layout.addWidget(splitter)
         splitter.addWidget(self.left_container)
         self.right_splitter = QSplitter(Qt.Vertical)
+        self.right_splitter.setObjectName("EditorTerminalSplitter")
+        self.right_splitter.setHandleWidth(3)
         self.right_splitter.setChildrenCollapsible(False)
         self.tabs = QTabWidget()
         self.tabs.setTabBar(QTabBar())
@@ -570,7 +574,20 @@ class MainWindow(QWidget):
         self.terminal_overlay.closed.connect(self.hide_integrated_terminal)
         self.right_splitter.addWidget(self.terminal_overlay)
         self.splitter = splitter
-        self.tree_width = 130
+        configured_tree_width = self.config_manager.get("explorer_width")
+        self.tree_width = (
+            configured_tree_width
+            if isinstance(configured_tree_width, int) and configured_tree_width >= 130
+            else 130
+        )
+        logger.info(
+            "Explorer initialized: configured_width=%r, applied_width=%s",
+            configured_tree_width,
+            self.tree_width,
+        )
+        self._save_explorer_width_timer = QTimer(self)
+        self._save_explorer_width_timer.setSingleShot(True)
+        self._save_explorer_width_timer.timeout.connect(self._persist_explorer_width)
         self.splitter.splitterMoved.connect(self.on_splitter_moved)
         self.fs_model = QFileSystemModel()
         self.fs_model.setRootPath("")
@@ -768,6 +785,13 @@ class MainWindow(QWidget):
             QSplitter::handle:vertical {{
                 height: 1px;
             }}
+            QSplitter#EditorTerminalSplitter::handle:vertical {{
+                background-color: {"rgba(255, 255, 255, 22)" if theme.is_dark else "rgba(0, 0, 0, 18)"};
+                height: 3px;
+            }}
+            QSplitter#EditorTerminalSplitter::handle:vertical:hover {{
+                background-color: {"rgba(255, 255, 255, 42)" if theme.is_dark else "rgba(0, 0, 0, 36)"};
+            }}
             QTabBar::tear {{
                 width: 0px;
                 border: none;
@@ -793,18 +817,9 @@ class MainWindow(QWidget):
         self.cmd_palette_shortcut.activated.connect(self.show_command_palette)
         self.project_dir_changed.connect(self.sync_terminal_directory)
 
-        self.session_restored = False
         self._wait_plugins_timer = QTimer(self)
         self._wait_plugins_timer.timeout.connect(self._check_plugins_and_restore)
         self._wait_plugins_timer.start(50)
-
-    def _check_plugins_and_restore(self):
-        if getattr(self, "session_restored", False):
-            return
-        if getattr(self.plugin_manager, "plugins_loaded", True):
-            self.session_restored = True
-            self._wait_plugins_timer.stop()
-            self.restore_session()
 
     def sync_terminal_directory(self, folder):
         if (
@@ -819,7 +834,62 @@ class MainWindow(QWidget):
     def _check_plugins_and_restore(self):
         if getattr(self.plugin_manager, "plugins_loaded", True):
             self._wait_plugins_timer.stop()
-            self.restore_session()
+            logger.info("Startup restore started")
+            try:
+                self.restore_session()
+            except Exception:
+                logger.exception("Startup session restore failed")
+                raise
+            finally:
+                self.ensurePolished()
+                self.main_layout.activate()
+                self.container_layout.activate()
+                self.update_overlay_geometry()
+                self._sync_border_geometry()
+                self.show()
+                QTimer.singleShot(0, self._apply_explorer_width)
+                logger.info(
+                    "Startup window shown: explorer_visible=%s, splitter_sizes=%s, "
+                    "splitter_width=%s, target_width=%s",
+                    not self.left_container.isHidden(),
+                    self.splitter.sizes(),
+                    self.splitter.width(),
+                    self.tree_width,
+                )
+
+    def _apply_explorer_width(self):
+        if self.left_container.isHidden():
+            logger.info("Explorer width not applied: panel is hidden")
+            return
+        if not self.isVisible():
+            logger.info("Explorer width application deferred until window is visible")
+            return
+        sizes = self.splitter.sizes()
+        total_width = self.splitter.width()
+        if total_width <= 0:
+            logger.warning(
+                "Explorer width not applied: splitter has no size (sizes=%s, width=%s)",
+                sizes,
+                self.splitter.width(),
+            )
+            return
+        previous_sizes = sizes
+        self.tree_width = min(max(self.tree_width, 130), total_width - 1)
+        self.splitter.setSizes(
+            [self.tree_width, total_width - self.tree_width]
+        )
+        logger.info(
+            "Explorer width applied: previous_sizes=%s, new_sizes=%s, "
+            "available_width=%s, target_width=%s",
+            previous_sizes,
+            self.splitter.sizes(),
+            total_width,
+            self.tree_width,
+        )
+
+    def _persist_explorer_width(self):
+        self.config_manager.set("explorer_width", self.tree_width)
+        logger.info("Explorer width persisted: width=%s", self.tree_width)
 
     def eventFilter(self, obj, event):
         return super().eventFilter(obj, event)
@@ -911,9 +981,24 @@ class MainWindow(QWidget):
         )
 
     def save_session(self):
+        sizes = self.splitter.sizes()
+        explorer_width = (
+            sizes[0]
+            if self.left_container.isVisible() and sizes[0] > 0
+            else self.tree_width
+        )
+        self.tree_width = explorer_width
+        self.config_manager.set("explorer_width", explorer_width)
+        logger.info(
+            "Session saved: explorer_width=%s, panel_visible=%s, splitter_sizes=%s",
+            explorer_width,
+            not self.left_container.isHidden(),
+            sizes,
+        )
         session_state = {
             "geometry": self.saveGeometry().toBase64().data().decode("utf-8"),
             "splitter": self.splitter.saveState().toBase64().data().decode("utf-8"),
+            "explorer_width": explorer_width,
             "project_dir": self.current_project_dir,
             "tabs": [],
             "active_tab_index": self.tabs.currentIndex(),
@@ -944,26 +1029,35 @@ class MainWindow(QWidget):
             geom_data = QByteArray.fromBase64(session_state["geometry"].encode("utf-8"))
             self.restoreGeometry(geom_data)
         if session_state.get("is_maximized", False):
-            self.showMaximized()
-        if session_state.get("project_dir"):
-            self.load_folder(session_state["project_dir"])
+            self.setWindowState(self.windowState() | Qt.WindowMaximized)
         if "splitter" in session_state:
             splitter_data = QByteArray.fromBase64(
                 session_state["splitter"].encode("utf-8")
             )
             self.splitter.restoreState(splitter_data)
             sizes = self.splitter.sizes()
-            if sizes[0] > 0 and sizes[0] < 50:
-                self.tree_width = 130
-                sizes[0] = 130
-                self.splitter.setSizes(sizes)
-            elif sizes[0] >= 50:
-                self.tree_width = sizes[0]
-                self.splitter.setSizes(sizes)
-            elif sizes[0] == 0:
-                self.tree_width = 130
-                sizes[0] = 130
-                self.splitter.setSizes(sizes)
+            saved_tree_width = self.config_manager.get(
+                "explorer_width",
+                session_state.get(
+                    "explorer_width",
+                    sizes[0] if sizes[0] >= 50 else self.tree_width,
+                ),
+            )
+            logger.info(
+                "Session splitter restored: saved_state_sizes=%s, "
+                "config_width=%r, session_width=%r, selected_width=%r",
+                sizes,
+                self.config_manager.get("explorer_width"),
+                session_state.get("explorer_width"),
+                saved_tree_width,
+            )
+            self.tree_width = (
+                max(130, saved_tree_width)
+                if isinstance(saved_tree_width, int)
+                else 130
+            )
+        if session_state.get("project_dir"):
+            self.load_folder(session_state["project_dir"])
         tabs_state = session_state.get("tabs", [])
         if tabs_state:
             for tab_info in tabs_state:
@@ -1020,8 +1114,7 @@ class MainWindow(QWidget):
 
     def resizeEvent(self, event):
         if self.left_container.isVisible():
-            total = self.splitter.sizes()[0] + self.splitter.sizes()[1]
-            self.splitter.setSizes([self.tree_width, total - self.tree_width])
+            self._apply_explorer_width()
         self.update_mask()
         self.update_overlay_geometry()
         super().resizeEvent(event)
@@ -1147,6 +1240,12 @@ class MainWindow(QWidget):
     def on_splitter_moved(self, _, __):
         if self.left_container.isVisible():
             self.tree_width = self.splitter.sizes()[0]
+            logger.info(
+                "Explorer splitter moved: position=%s, sizes=%s",
+                self.tree_width,
+                self.splitter.sizes(),
+            )
+            self._save_explorer_width_timer.start(250)
 
     def create_menu_bar(self):
         menubar = self.menuBar()
@@ -1340,6 +1439,11 @@ class MainWindow(QWidget):
 
     def load_folder(self, folder):
         if folder and os.path.exists(folder):
+            logger.info(
+                "Loading project folder: explorer_width_before=%s, splitter_sizes=%s",
+                self.tree_width,
+                self.splitter.sizes(),
+            )
             self.close_folder()
             if self.fs_watcher.directories():
                 self.fs_watcher.removePaths(self.fs_watcher.directories())
@@ -1354,7 +1458,12 @@ class MainWindow(QWidget):
             self.fs_watcher.addPath(folder)
             self.folder_section.show()
             self.left_container.show()
-            self.splitter.setSizes([self.tree_width, self.width() - self.tree_width])
+            self._apply_explorer_width()
+            logger.info(
+                "Project folder loaded: explorer_width=%s, splitter_sizes=%s",
+                self.tree_width,
+                self.splitter.sizes(),
+            )
             self.show_status_message(f"Folder - {folder}")
             self.project_dir_changed.emit(folder)
             try:
@@ -2776,6 +2885,15 @@ class MainWindow(QWidget):
 
 def main():
     os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
+    log_dir = os.path.join(os.path.expanduser("~"), ".lumos_editor")
+    os.makedirs(log_dir, exist_ok=True)
+    logging.basicConfig(
+        filename=os.path.join(log_dir, "startup.log"),
+        filemode="a",
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+    )
+    logger.info("===== Application startup =====")
 
     try:
         QApplication.setHighDpiScaleFactorRoundingPolicy(
@@ -2801,7 +2919,6 @@ def main():
         except Exception as e:
             print(f"Error loading theme at startup: {e}")
         window = MainWindow()
-        window.show()
         exit_code = app.exec_()
         if not app.property("restart_requested"):
             sys.exit(exit_code)

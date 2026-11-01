@@ -98,13 +98,15 @@ class LumosThemeManager:
         c_paper = QColor(t.get("paper-color", "#1e1e1e"))
         c_margin = QColor(t.get("margin-color", "#8d8a9f"))
         c_text = QColor("#d4d4d4")
-        c_accent = QColor("#0098ff")
+        c_keyword = QColor("#0098ff")
 
         for syntax in t.get("syntax", []):
             if "default" in syntax:
                 c_text = QColor(syntax["default"].get("color", c_text.name()))
             if "keyword" in syntax:
-                c_accent = QColor(syntax["keyword"].get("color", c_accent.name()))
+                c_keyword = QColor(syntax["keyword"].get("color", c_keyword.name()))
+
+        c_accent = QColor(t.get("accent-color", c_keyword.name()))
 
         self.is_dark = c_paper.lightness() < 128
         bg_target = QColor("#ffffff") if self.is_dark else QColor("#000000")

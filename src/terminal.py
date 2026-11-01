@@ -58,6 +58,12 @@ COLOR_MAP = {
 }
 
 
+def _terminal_background_color():
+    if theme.is_dark:
+        return theme.color1
+    return QColor(theme.color1).darker(106).name()
+
+
 def get_color_hex(color_str, default_color):
     if not color_str or color_str == "default":
         return default_color
@@ -499,7 +505,7 @@ class Backend(QtCore.QThread):
             self.output_buffer[line_no] = line_chars
 
         default_fg = theme.color26 if hasattr(theme, "color26") else "#e5e5e5"
-        default_bg = theme.color2 if hasattr(theme, "color2") else "#1e1e1e"
+        default_bg = _terminal_background_color()
 
         html_lines = []
         for line_chars in self.output_buffer:
@@ -723,7 +729,7 @@ class Terminal(QWidget):
         self.input_container.setFixedHeight(30)
         self.input_container.setStyleSheet(
             "QWidget#InputContainer {"
-            f"   background-color: {theme.color2};"
+            f"   background-color: {_terminal_background_color()};"
             f"   border-top: 1px solid {theme.color15};"
             "}"
         )
@@ -885,7 +891,7 @@ class _TerminalWidget(QTextEdit):
 
     def update_stylesheet(self):
         self.setStyleSheet(
-            f"QTextEdit {{ border: 0; color: {theme.color26}; background-color: {theme.color2}; font-family: Consolas, monospace; font-size: 13px; }}"
+            f"QTextEdit {{ border: 0; color: {theme.color26}; background-color: {_terminal_background_color()}; font-family: Consolas, monospace; font-size: 13px; }}"
         )
 
     @property
