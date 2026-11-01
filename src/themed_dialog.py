@@ -68,7 +68,7 @@ def themed_dialog_stylesheet(dialog_selector):
         QCheckBox::indicator:checked {{
             background-color: {theme.color35};
             border-color: {theme.color35};
-            image: url(resources:/checkmark.svg);
+            image: url(resources:/checkmark.png);
         }}
         QCheckBox::indicator:checked:hover {{
             background-color: {theme.color37};
