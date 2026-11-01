@@ -24,7 +24,6 @@ from PyQt5.QtWidgets import (
     QCheckBox,
     QDesktopWidget,
     QDialog,
-    QFileDialog,
     QFileSystemModel,
     QFrame,
     QGraphicsDropShadowEffect,
@@ -33,7 +32,6 @@ from PyQt5.QtWidgets import (
     QLineEdit,
     QMenu,
     QMenuBar,
-    QMessageBox,
     QPushButton,
     QShortcut,
     QSizeGrip,
@@ -72,6 +70,11 @@ from src import (
     WelcomeScreen,
 )
 from src.theme_manager import theme
+from src.message_box import QMessageBox
+from src.themed_dialog import (
+    ThemedFileDialog as QFileDialog,
+    ThemedInputDialog as QInputDialog,
+)
 
 RADIUS = 8
 SHADOW_PADDING = 20
@@ -2484,8 +2487,6 @@ class MainWindow(QWidget):
                 unsaved_files.append(os.path.basename(tab_widget.filepath))
 
         if unsaved_files:
-            from PyQt5.QtWidgets import QMessageBox
-
             msg_box = QMessageBox(target if isinstance(target, QWidget) else None)
             msg_box.setIcon(QMessageBox.Warning)
             msg_box.setWindowTitle("Unsaved Changes")

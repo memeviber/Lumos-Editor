@@ -13,14 +13,11 @@ from PyQt5.QtGui import QDesktopServices, QIcon
 from PyQt5.QtWidgets import (
     QAction,
     QApplication,
-    QFileDialog,
     QFrame,
     QHBoxLayout,
-    QInputDialog,
     QLabel,
     QLineEdit,
     QMenu,
-    QMessageBox,
     QPushButton,
     QScrollArea,
     QSizePolicy,
@@ -32,6 +29,11 @@ from PyQt5.QtWidgets import (
 )
 
 from . import md_renderer
+from .message_box import QMessageBox
+from .themed_dialog import (
+    ThemedFileDialog as QFileDialog,
+    ThemedInputDialog as QInputDialog,
+)
 from .theme_manager import theme
 
 MARKDOWN_CSS = f"""

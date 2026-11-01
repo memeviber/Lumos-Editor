@@ -7,7 +7,6 @@ from PyQt5.QtMultimediaWidgets import QVideoWidget
 from PyQt5.QtWidgets import (
     QGridLayout,
     QLabel,
-    QMessageBox,
     QPushButton,
     QSlider,
     QStyle,
@@ -15,6 +14,7 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+from .message_box import QMessageBox
 from .theme_manager import theme
 
 

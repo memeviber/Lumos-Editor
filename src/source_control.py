@@ -9,10 +9,8 @@ from PyQt5.QtGui import QFont, QIcon
 from PyQt5.QtWidgets import (
     QFrame,
     QHBoxLayout,
-    QInputDialog,
     QLabel,
     QMenu,
-    QMessageBox,
     QProgressBar,
     QPushButton,
     QTreeWidget,
@@ -21,6 +19,8 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+from .message_box import QMessageBox
+from .themed_dialog import ThemedInputDialog as QInputDialog
 from .theme_manager import theme
 
 

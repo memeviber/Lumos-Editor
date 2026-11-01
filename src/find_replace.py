@@ -1,5 +1,6 @@
 import re
 
+from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QKeySequence
 from PyQt5.QtWidgets import (
     QCheckBox,
@@ -7,19 +8,37 @@ from PyQt5.QtWidgets import (
     QGridLayout,
     QLabel,
     QLineEdit,
-    QMessageBox,
     QPushButton,
     QShortcut,
+    QVBoxLayout,
+    QWidget,
 )
+
+from .message_box import QMessageBox
+from .themed_dialog import ThemedDialogTitleBar, themed_dialog_stylesheet
 
 
 class FindReplaceDialog(QDialog):
     def __init__(self, parent=None, editor=None):
-        super().__init__(parent)
+        super().__init__(parent, Qt.Dialog | Qt.FramelessWindowHint)
+        self.setObjectName("FindReplaceDialog")
         self.setWindowTitle("Find & Replace")
         self.setModal(False)
         self.editor = editor
-        layout = QGridLayout(self)
+        self.setStyleSheet(
+            themed_dialog_stylesheet("QDialog#FindReplaceDialog")
+        )
+        self.dialog_layout = QVBoxLayout(self)
+        self.dialog_layout.setContentsMargins(1, 1, 1, 1)
+        self.dialog_layout.setSpacing(0)
+        self.title_bar = ThemedDialogTitleBar(self, "Find & Replace")
+        self.title_bar.closeRequested.connect(self.close)
+        self.dialog_layout.addWidget(self.title_bar)
+        content = QWidget(self)
+        layout = QGridLayout(content)
+        layout.setContentsMargins(16, 14, 16, 10)
+        layout.setHorizontalSpacing(8)
+        layout.setVerticalSpacing(10)
         self.find_label = QLabel("Find:")
         self.find_input = QLineEdit()
         self.replace_label = QLabel("Replace:")
@@ -38,6 +57,7 @@ class FindReplaceDialog(QDialog):
         layout.addWidget(self.replace_btn, 2, 2)
         layout.addWidget(self.replace_all_btn, 2, 3)
         layout.addWidget(self.close_btn, 3, 0, 1, 4)
+        self.dialog_layout.addWidget(content)
         self.find_btn.clicked.connect(self.find_next)
         self.replace_btn.clicked.connect(self.replace_one)
         self.replace_all_btn.clicked.connect(self.replace_all)
@@ -49,6 +69,11 @@ class FindReplaceDialog(QDialog):
         self.replace_all_shortcut = QShortcut(QKeySequence("Ctrl+Return"), self)
         self.replace_all_shortcut.activated.connect(self.replace_all)
         self.find_input.setFocus()
+
+    def setWindowTitle(self, title):
+        super().setWindowTitle(title)
+        if hasattr(self, "title_bar"):
+            self.title_bar.setTitle(title)
 
     def find_next(self):
         if not self.editor:

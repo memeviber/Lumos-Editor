@@ -4,10 +4,11 @@ import shutil
 from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import (
     QAbstractItemView,
-    QMessageBox,
     QStyledItemDelegate,
     QTreeView,
 )
+
+from .message_box import QMessageBox
 
 
 class FileTreeDelegate(QStyledItemDelegate):
@@ -147,6 +148,5 @@ class FileTreeView(QTreeView):
                     shutil.move(source_path, new_path)
             except Exception as e:
                 QMessageBox.warning(self, "Error", f"Could not move item: {str(e)}")
-                QMessageBox(self, "Error", f"Could not move item: {str(e)}")
                 return
         event.accept()

@@ -10,12 +10,11 @@ from PyQt5.QtWidgets import (
     QApplication,
     QDialog,
     QDialogButtonBox,
-    QInputDialog,
+    QHBoxLayout,
     QLabel,
     QListWidget,
     QListWidgetItem,
     QMenu,
-    QMessageBox,
     QVBoxLayout,
     QWidget,
 )
@@ -23,7 +22,11 @@ from PyQt5.QtWidgets import (
 from .API import LumosAPI
 from .editor_tab import EditorTab
 from .lexer import BaseLexer, PygmentsBaseLexer
+from .message_box import QMessageBox
 from .split_tab import SplitTab
+from .themed_dialog import ThemedDialogTitleBar
+from .themed_dialog import ThemedInputDialog as QInputDialog
+from .theme_manager import theme
 
 
 class PluginInfo:
@@ -685,17 +688,79 @@ class PluginManager:
 
 class PluginDialog(QDialog):
     def __init__(self, plugin_manager, config_manager, parent=None):
-        super().__init__(parent)
+        super().__init__(parent, Qt.Dialog | Qt.FramelessWindowHint)
         self.plugin_manager = plugin_manager
         self.config_manager = config_manager
         self.setWindowTitle("Manage Plugins")
-        self.setMinimumWidth(400)
+        self.setObjectName("PluginDialog")
+        self.setMinimumSize(500, 360)
+        self.setStyleSheet(
+            f"""
+            QDialog#PluginDialog {{
+                background-color: {theme.color2};
+                color: {theme.color27};
+                border: 1px solid {theme.color13};
+                border-radius: 8px;
+            }}
+            QLabel {{
+                color: {theme.color27};
+                background: transparent;
+            }}
+            QListWidget {{
+                background-color: {theme.color1};
+                color: {theme.color27};
+                border: 1px solid {theme.color13};
+                border-radius: 4px;
+                padding: 4px;
+                outline: none;
+            }}
+            QListWidget::item {{
+                padding: 4px;
+                border-radius: 3px;
+            }}
+            QListWidget::item:selected {{
+                background-color: {theme.color9};
+                color: {theme.color31};
+            }}
+            QPushButton {{
+                background-color: {theme.color7};
+                color: {theme.color27};
+                border: 1px solid {theme.color13};
+                border-radius: 4px;
+                min-width: 76px;
+                padding: 6px 12px;
+            }}
+            QPushButton:hover {{
+                background-color: {theme.color9};
+            }}
+            QPushButton:pressed {{
+                background-color: {theme.color11};
+            }}
+            QPushButton:default {{
+                background-color: {theme.color35};
+                color: {theme.color31};
+                border-color: {theme.color35};
+            }}
+            QPushButton:default:hover {{
+                background-color: {theme.color37};
+            }}
+            """
+        )
         self.layout = QVBoxLayout(self)
+        self.layout.setContentsMargins(1, 1, 1, 1)
+        self.layout.setSpacing(0)
+        self.title_bar = ThemedDialogTitleBar(self, "Manage Plugins")
+        self.title_bar.closeRequested.connect(self.reject)
+        self.layout.addWidget(self.title_bar)
         self.info_label = QLabel(
             "Check the plugins you want to enable. Changes will apply after restarting."
         )
+        self.info_label.setWordWrap(True)
+        self.info_label.setContentsMargins(16, 10, 16, 0)
         self.layout.addWidget(self.info_label)
         self.plugin_list_widget = QListWidget()
+        self.plugin_list_widget.setMinimumHeight(220)
+        self.plugin_list_widget.setContentsMargins(0, 0, 0, 0)
         self.layout.addWidget(self.plugin_list_widget)
         self.populate_plugin_list()
         self.button_box = QDialogButtonBox(
@@ -703,7 +768,18 @@ class PluginDialog(QDialog):
         )
         self.button_box.accepted.connect(self.accept)
         self.button_box.rejected.connect(self.reject)
-        self.layout.addWidget(self.button_box)
+        button_layout = QHBoxLayout()
+        button_layout.setContentsMargins(16, 12, 16, 16)
+        button_layout.addStretch(1)
+        button_layout.addWidget(self.button_box)
+        self.layout.addLayout(button_layout)
+        self.plugin_list_widget.setStyleSheet(
+            f"""
+            QListWidget {{
+                margin: 8px 16px 0px;
+            }}
+            """
+        )
 
     def populate_plugin_list(self):
         for filename, manifest in self.plugin_manager.discovered_plugins.items():
