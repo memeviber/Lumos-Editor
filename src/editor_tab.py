@@ -12,7 +12,13 @@ from PyQt5.QtCore import QEvent, QObject, QPointF, QRectF, Qt, QTimer, pyqtSigna
 from PyQt5.QtGui import QColor, QDesktopServices, QFont, QPainter, QPalette
 from PyQt5.QtWidgets import QApplication, QHBoxLayout, QScrollBar, QTextBrowser, QWidget
 
-from src.lexer import JsonLexer, MarkdownLexer, PlainTextLexer, PythonLexer
+from src.lexer import (
+    JsonLexer,
+    MarkdownLexer,
+    PlainTextLexer,
+    PythonLexer,
+    RequirementsLexer,
+)
 
 from . import md_renderer
 from .theme_manager import theme
@@ -669,7 +675,12 @@ class EditorTab(QWidget):
             self.auto_timer.setSingleShot(True)
             self.auto_timer.timeout.connect(self.refresh_autocomplete)
             return
-        if filepath.endswith((".py", ".pyw")):
+        filename = os.path.basename(filepath).lower()
+        if filename == "requirements.txt" or (
+            filename.startswith("requirements-") and filename.endswith(".txt")
+        ):
+            self.setup_requirements_features()
+        elif filepath.endswith((".py", ".pyw")):
             self.setup_python_features()
         elif filepath.endswith(".json"):
             self.setup_json_features()
@@ -815,6 +826,12 @@ class EditorTab(QWidget):
     def setup_markdown_features(self):
         font = self.editor.font()
         self.lexer = MarkdownLexer(self.editor, theme_name=self.theme_name)
+        self.lexer.setDefaultFont(font)
+        self.editor.setLexer(self.lexer)
+
+    def setup_requirements_features(self):
+        font = self.editor.font()
+        self.lexer = RequirementsLexer(self.editor, theme_name=self.theme_name)
         self.lexer.setDefaultFont(font)
         self.editor.setLexer(self.lexer)
 

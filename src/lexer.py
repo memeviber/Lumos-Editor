@@ -6,7 +6,7 @@ from typing import TypedDict
 
 import jedi
 from pygments import lex
-from pygments.lexer import bygroups, inherit
+from pygments.lexer import RegexLexer, bygroups, inherit
 from pygments.lexers.data import JsonLexer as PyG_JsonLexer
 from pygments.lexers.markup import MarkdownLexer as PyG_MarkdownLexer
 from pygments.lexers.python import PythonLexer as PyG_PythonLexer
@@ -17,6 +17,7 @@ from pygments.token import (
     Literal,
     Name,
     Number,
+    Operator,
     Punctuation,
     String,
     Text,
@@ -345,6 +346,51 @@ class CustomPyG_PythonLexer(PyG_PythonLexer):
     }
 
 
+class PyG_RequirementsLexer(RegexLexer):
+    flags = re.IGNORECASE | re.MULTILINE
+    tokens = {
+        "root": [
+            (
+                r"^[ \t]*(-{1,2}(?:e|editable|r|requirement|c|constraint|"
+                r"index-url|extra-index-url|find-links|no-index|trusted-host|"
+                r"pre|prefer-binary|only-binary|no-binary))(?=[ \t=])",
+                Keyword,
+            ),
+            (
+                r"^[ \t]*([A-Za-z0-9][A-Za-z0-9._-]*)"
+                r"(?=[ \t]*(?:\[[^\]\n]*\])?[ \t]*(?:[<>=!~@;,]|\s|$))",
+                Name.Class,
+            ),
+            (r"#[^\n]*", Comment.Single),
+            (
+                r"(?:https?|ftp|file|git\+https?|git\+ssh|hg\+https?|"
+                r"svn\+https?|bzr\+https?)://[^\s\\]+",
+                String,
+            ),
+            (r"\b(?:and|or|not|in)\b", Keyword),
+            (
+                r"\b(?:python_version|python_full_version|"
+                r"implementation_name|implementation_version|"
+                r"platform_release|platform_system|platform_version|"
+                r"platform_machine|platform_python_implementation|"
+                r"sys_platform|os_name|extra)\b",
+                Name.Attribute,
+            ),
+            (r"""(['"])[^'"\n]*\1""", String),
+            (r"(?:===|~=|==|!=|<=|>=|<|>|@|=)", Operator),
+            (r"\d+(?:\.\d+)*(?:[a-zA-Z][a-zA-Z0-9._-]*)?", Number),
+            (r"\[[^\]\n]*\]", Name.Namespace),
+            (r"--[A-Za-z][A-Za-z0-9-]*", Keyword),
+            (r"-[A-Za-z][A-Za-z0-9-]*", Keyword),
+            (r"[A-Za-z_][A-Za-z0-9_.-]*", Name),
+            (r"[;,()\[\],]", Punctuation),
+            (r"\\", Punctuation),
+            (r"\s+", Text),
+            (r".", Text),
+        ]
+    }
+
+
 class PythonLexer(PygmentsBaseLexer):
     def __init__(self, editor, theme_name="default"):
         super().__init__("Python", editor, theme_name=theme_name)
@@ -452,6 +498,29 @@ class MarkdownLexer(PygmentsBaseLexer):
             Generic.Traceback: self.CONSTANTS,
             Name.Tag: self.FUNCTIONS,
             Name.Attribute: self.CONSTANTS,
+        }
+
+    def build_apis(self):
+        self.apis.clear()
+        self.apis.prepare()
+
+
+class RequirementsLexer(PygmentsBaseLexer):
+    def __init__(self, editor, theme_name="default"):
+        super().__init__("Python Requirements", editor, theme_name=theme_name)
+        self.pygments_lexer = PyG_RequirementsLexer()
+        self.token_map = {
+            Token.Text: self.DEFAULT,
+            Comment: self.COMMENTS,
+            Keyword: self.KEYWORD,
+            Name: self.DEFAULT,
+            Name.Attribute: self.TYPES,
+            Name.Class: self.CLASSES,
+            Name.Namespace: self.FUNCTIONS,
+            Number: self.CONSTANTS,
+            Operator: self.KEYWORD,
+            Punctuation: self.DEFAULT,
+            String: self.STRING,
         }
 
     def build_apis(self):
