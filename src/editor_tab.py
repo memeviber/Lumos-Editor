@@ -67,6 +67,8 @@ class AutoPairEventFilter(QObject):
         if mods & Qt.ControlModifier:
             return False
         if text in self.PAIRS:
+            if text == "(":
+                self.editor.SendScintilla(QsciScintilla.SCI_AUTOCCANCEL)
             open_ch = text
             close_ch = self.PAIRS[open_ch]
             line, col = self.editor.getCursorPosition()
@@ -127,6 +129,10 @@ class MiniMap(QWidget):
         self.editor = editor
         self.setFixedWidth(120)
         self.setMouseTracking(True)
+        self.setCursor(Qt.ArrowCursor)
+        self._dragging_viewport = False
+        self._drag_start_y = 0
+        self._drag_start_line = 0
         self.LINE_PX = 2.0
         self.STYLE_FETCH_THRESHOLD = 3000
         self._line_cache = {}
@@ -136,7 +142,7 @@ class MiniMap(QWidget):
         self._mini_font.setPixelSize(2)
         self._update_timer = QTimer(self)
         self._update_timer.setSingleShot(True)
-        self._update_timer.setInterval(200)
+        self._update_timer.setInterval(120)
         self._update_timer.timeout.connect(self._on_update_timeout)
         self.scrollbar = QScrollBar(Qt.Vertical, self)
         self.scrollbar.setFixedWidth(self.SCROLLBAR_WIDTH)
@@ -503,6 +509,15 @@ class MiniMap(QWidget):
     def mousePressEvent(self, event):
         if not self.editor:
             return
+        if event.button() == Qt.LeftButton:
+            viewport_rect = self._viewport_rect()
+            if viewport_rect.contains(QPointF(event.pos())):
+                self._dragging_viewport = True
+                self._drag_start_y = event.pos().y()
+                self._drag_start_line = int(self.editor.firstVisibleLine())
+                self.setCursor(Qt.ClosedHandCursor)
+                event.accept()
+                return
         if event.pos().x() >= (self.width() - self.SCROLLBAR_WIDTH):
             y = event.pos().y()
             sb_h = max(1, self.scrollbar.height())
@@ -529,6 +544,68 @@ class MiniMap(QWidget):
             ratio_val = float(desired_first) / float(max_first)
             self.scrollbar.setValue(int(round(ratio_val * self.HIGH_RANGE)))
         self._request_update()
+
+    def _viewport_rect(self):
+        if not self.editor:
+            return QRectF()
+        start_line = int(self._scroll_start_line())
+        first_visible = int(self.editor.firstVisibleLine())
+        visible_lines = max(
+            1, self.editor.SendScintilla(QsciScintilla.SCI_LINESONSCREEN)
+        )
+        content_width = max(0, self.width() - self.SCROLLBAR_WIDTH)
+        content_height = max(0, self.height())
+        rect = QRectF(
+            0,
+            (first_visible - start_line) * self.LINE_PX,
+            content_width,
+            visible_lines * self.LINE_PX,
+        )
+        return rect.intersected(QRectF(0, 0, content_width, content_height))
+
+    def mouseMoveEvent(self, event):
+        if not self.editor:
+            return
+        if self._dragging_viewport:
+            total_lines = max(1, self.editor.lines())
+            visible_lines = max(
+                1, self.editor.SendScintilla(QsciScintilla.SCI_LINESONSCREEN)
+            )
+            max_first = max(0, total_lines - visible_lines)
+            viewport_height = visible_lines * self.LINE_PX
+            travel = max(1.0, self.height() - viewport_height)
+            line_delta = round(
+                (event.pos().y() - self._drag_start_y) * max_first / travel
+            )
+            target_first = max(
+                0, min(max_first, self._drag_start_line + line_delta)
+            )
+            value = (
+                int(round(target_first * self.HIGH_RANGE / max_first))
+                if max_first
+                else 0
+            )
+            self.scrollbar.setValue(value)
+            event.accept()
+            return
+        self.setCursor(
+            Qt.OpenHandCursor
+            if self._viewport_rect().contains(QPointF(event.pos()))
+            else Qt.ArrowCursor
+        )
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.LeftButton and self._dragging_viewport:
+            self._dragging_viewport = False
+            self.setCursor(
+                Qt.OpenHandCursor
+                if self._viewport_rect().contains(QPointF(event.pos()))
+                else Qt.ArrowCursor
+            )
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
 
     def wheelEvent(self, event):
         if not self.editor:

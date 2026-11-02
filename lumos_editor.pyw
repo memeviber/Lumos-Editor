@@ -490,6 +490,7 @@ class MainWindow(QWidget):
 
     def __init__(self):
         super().__init__()
+        self._closing = False
         self.config_manager = ConfigManager()
         QDir.addSearchPath(
             "resources",
@@ -2333,9 +2334,8 @@ class MainWindow(QWidget):
                 filepaths_to_remove.add(os.path.abspath(tab.filepath))
         for fp in filepaths_to_remove:
             self.cache.pop(fp, None)
-        if self.tabs.count() == 0:
-            welcome_tab = WelcomeScreen()
-            self.tabs.addTab(welcome_tab, "Welcome")
+        if self.tabs.count() == 0 and not self._closing:
+            self.close()
         return True
 
     def close_file_tab(self, filepath):
@@ -2398,12 +2398,14 @@ class MainWindow(QWidget):
         self.close()
 
     def closeEvent(self, event):
+        self._closing = True
         is_restarting = QApplication.instance().property("restart_requested")
         self.save_recent_files()
         self.save_session()
         for i in reversed(range(self.tabs.count())):
             if not self.close_tab(i):
                 event.ignore()
+                self._closing = False
                 if is_restarting:
                     QApplication.instance().setProperty("restart_requested", False)
                 return
