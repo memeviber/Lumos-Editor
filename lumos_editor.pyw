@@ -9,6 +9,7 @@ from PyQt5.QtCore import (
     QDir,
     QEvent,
     QFileSystemWatcher,
+    QRect,
     QRectF,
     QSize,
     Qt,
@@ -138,11 +139,58 @@ class BorderOverlay(QWidget):
 
 
 class CustomSizeGrip(QSizeGrip):
+    resize_started = pyqtSignal()
+    resize_finished = pyqtSignal()
+
     def __init__(self, parent=None, color=QColor(f"{theme.color23}")):
         super().__init__(parent)
         self._color = color
+        self._drag_start_pos = None
+        self._window_start_size = None
         self.setFixedSize(14, 14)
         self.setStyleSheet("background: transparent;")
+        self.setCursor(Qt.SizeFDiagCursor)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            window = self.window()
+            self._drag_start_pos = event.globalPos()
+            self._window_start_size = window.size()
+            self.resize_started.emit()
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if (
+            self._drag_start_pos is not None
+            and self._window_start_size is not None
+            and event.buttons() & Qt.LeftButton
+        ):
+            delta = event.globalPos() - self._drag_start_pos
+            window = self.window()
+            minimum_size = getattr(
+                window, "_window_minimum_size", window.minimumSize()
+            )
+            window.resize(
+                max(minimum_size.width(), self._window_start_size.width() + delta.x()),
+                max(
+                    minimum_size.height(),
+                    self._window_start_size.height() + delta.y(),
+                ),
+            )
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.LeftButton and self._drag_start_pos is not None:
+            self._drag_start_pos = None
+            self._window_start_size = None
+            self.resize_finished.emit()
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -160,6 +208,84 @@ class CustomSizeGrip(QSizeGrip):
                 y = int(h - (row + 1) * (dot + spacing))
                 painter.drawRect(x, y, dot, dot)
         painter.end()
+
+
+class WindowResizeHandle(QWidget):
+    resize_started = pyqtSignal()
+    resize_finished = pyqtSignal()
+
+    def __init__(self, parent, edges, cursor):
+        super().__init__(parent)
+        self.edges = edges
+        self._drag_start_pos = None
+        self._window_start_geometry = None
+        self.setCursor(cursor)
+        self.setStyleSheet("background: transparent;")
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            window = self.window()
+            self._drag_start_pos = event.globalPos()
+            self._window_start_geometry = window.geometry()
+            self.resize_started.emit()
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if (
+            self._drag_start_pos is None
+            or self._window_start_geometry is None
+            or not event.buttons() & Qt.LeftButton
+        ):
+            super().mouseMoveEvent(event)
+            return
+
+        delta = event.globalPos() - self._drag_start_pos
+        geometry = QRect(self._window_start_geometry)
+        minimum_size = getattr(
+            self.window(), "_window_minimum_size", self.window().minimumSize()
+        )
+        if "left" in self.edges:
+            geometry.setLeft(
+                min(
+                    geometry.left() + delta.x(),
+                    geometry.right() - minimum_size.width() + 1,
+                )
+            )
+        elif "right" in self.edges:
+            geometry.setRight(
+                max(
+                    geometry.right() + delta.x(),
+                    geometry.left() + minimum_size.width() - 1,
+                )
+            )
+        if "top" in self.edges:
+            geometry.setTop(
+                min(
+                    geometry.top() + delta.y(),
+                    geometry.bottom() - minimum_size.height() + 1,
+                )
+            )
+        elif "bottom" in self.edges:
+            geometry.setBottom(
+                max(
+                    geometry.bottom() + delta.y(),
+                    geometry.top() + minimum_size.height() - 1,
+                )
+            )
+
+        self.window().setGeometry(geometry)
+        event.accept()
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.LeftButton and self._drag_start_pos is not None:
+            self._drag_start_pos = None
+            self._window_start_geometry = None
+            self.resize_finished.emit()
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
 
 
 class TitleBar(QWidget):
@@ -314,6 +440,7 @@ class TitleBar(QWidget):
             self.parent.showNormal()
             self.max_btn.setToolTip("Maximize")
         else:
+            self.parent.restore_snap_constraints()
             self.parent.showMaximized()
             self.max_btn.setToolTip("Restore")
 
@@ -336,6 +463,8 @@ class MainWindow(QWidget):
         self.plugin_manager = PluginManager(self, self.config_manager)
         self.resize(1218, 730)
         self.setMinimumSize(812, 630)
+        self._window_minimum_size = self.minimumSize()
+        self._snap_side = None
         qr = self.frameGeometry()
         cp = QDesktopWidget().availableGeometry().center()
         qr.moveCenter(cp)
@@ -365,6 +494,12 @@ class MainWindow(QWidget):
         self.container.setGraphicsEffect(self.shadow_effect)
         self.border_overlay = BorderOverlay(self, radius=RADIUS)
         self.border_overlay.raise_()
+        self._interactive_resize = False
+        self.resize_overlay = QWidget(self)
+        self.resize_overlay.setAttribute(Qt.WA_StyledBackground, True)
+        self.resize_overlay.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        self.resize_overlay.setStyleSheet(f"background: {self.bg_inner}; border: none;")
+        self.resize_overlay.hide()
         self.titlebar = TitleBar(self)
         self.central_widget = QWidget()
         self.central_widget.setStyleSheet("background: transparent;")
@@ -413,7 +548,11 @@ class MainWindow(QWidget):
             self.status_bar, color=QColor(f"{theme.color23}")
         )
         self.status_bar.addPermanentWidget(self.size_grip)
+        self.size_grip.resize_started.connect(self.begin_interactive_resize)
+        self.size_grip.resize_finished.connect(self.finish_interactive_resize)
         self.size_grip.setVisible(not self.isMaximized())
+        self.resize_handles = []
+        self._create_resize_handles()
         layout = QHBoxLayout(self.central_widget)
         layout.setContentsMargins(0, 0, 0, 0)
         self.left_container = QWidget()
@@ -828,6 +967,14 @@ class MainWindow(QWidget):
         QTimer.singleShot(0, self.update_overlay_geometry)
         self.cmd_palette_shortcut = QShortcut(QKeySequence("Ctrl+Shift+P"), self)
         self.cmd_palette_shortcut.activated.connect(self.show_command_palette)
+        self.snap_left_shortcut = QShortcut(QKeySequence("Alt+Left"), self)
+        self.snap_left_shortcut.activated.connect(lambda: self.snap_to_half("left"))
+        self.snap_right_shortcut = QShortcut(QKeySequence("Alt+Right"), self)
+        self.snap_right_shortcut.activated.connect(lambda: self.snap_to_half("right"))
+        self.snap_up_shortcut = QShortcut(QKeySequence("Alt+Up"), self)
+        self.snap_up_shortcut.activated.connect(self.showMaximized)
+        self.snap_down_shortcut = QShortcut(QKeySequence("Alt+Down"), self)
+        self.snap_down_shortcut.activated.connect(self.restore_window)
         self.project_dir_changed.connect(self.sync_terminal_directory)
 
         self._wait_plugins_timer = QTimer(self)
@@ -1203,9 +1350,111 @@ class MainWindow(QWidget):
             self._menubar = QMenuBar(self)
         return self._menubar
 
+    def snap_to_half(self, side):
+        if side not in ("left", "right"):
+            raise ValueError(f"Unsupported snap side: {side}")
+
+        desktop = QApplication.desktop()
+        screen = desktop.screenNumber(self.frameGeometry().center())
+        available = desktop.availableGeometry(screen)
+        left_width = available.width() // 2
+        x = available.x()
+        width = left_width
+        if side == "right":
+            x += left_width
+            width = available.width() - left_width
+
+        if self.isMaximized():
+            self.showNormal()
+        self.setMinimumSize(
+            min(self._window_minimum_size.width(), width),
+            min(self._window_minimum_size.height(), available.height()),
+        )
+        self._snap_side = side
+        self.setGeometry(
+            QRect(x, available.y(), width, available.height())
+        )
+
+    def restore_window(self):
+        if self.isMaximized():
+            self.showNormal()
+        if self._snap_side is not None:
+            self.restore_snap_constraints()
+
+    def restore_snap_constraints(self):
+        if self._snap_side is None:
+            return
+        self.setMinimumSize(self._window_minimum_size)
+        self._snap_side = None
+
+    def _create_resize_handles(self):
+        handles = (
+            ({"left", "top"}, Qt.SizeFDiagCursor),
+            ({"top"}, Qt.SizeVerCursor),
+            ({"right", "top"}, Qt.SizeBDiagCursor),
+            ({"left"}, Qt.SizeHorCursor),
+            ({"right"}, Qt.SizeHorCursor),
+            ({"left", "bottom"}, Qt.SizeBDiagCursor),
+            ({"bottom"}, Qt.SizeVerCursor),
+        )
+        for edges, cursor in handles:
+            handle = WindowResizeHandle(self, edges, cursor)
+            handle.resize_started.connect(self.begin_interactive_resize)
+            handle.resize_finished.connect(self.finish_interactive_resize)
+            self.resize_handles.append(handle)
+        self._sync_resize_handles()
+
+    def _sync_resize_handles(self):
+        if not hasattr(self, "resize_handles"):
+            return
+        frame = self.container.geometry()
+        left = frame.left()
+        top = frame.top()
+        right = frame.right()
+        bottom = frame.bottom()
+        corner = 14
+        edge = 8
+        half_corner = corner // 2
+        half_edge = edge // 2
+        geometries = (
+            QRect(left - half_corner, top - half_corner, corner, corner),
+            QRect(
+                left + half_corner,
+                top - half_edge,
+                max(0, right - left - corner + 1),
+                edge,
+            ),
+            QRect(right - half_corner + 1, top - half_corner, corner, corner),
+            QRect(
+                left - half_edge,
+                top + half_corner,
+                edge,
+                max(0, bottom - top - corner + 1),
+            ),
+            QRect(
+                right - half_edge + 1,
+                top + half_corner,
+                edge,
+                max(0, bottom - top - corner + 1),
+            ),
+            QRect(left - half_corner, bottom - half_corner + 1, corner, corner),
+            QRect(
+                left + half_corner,
+                bottom - half_edge + 1,
+                max(0, right - left - corner + 1),
+                edge,
+            ),
+        )
+        visible = not self.isMaximized() and self._snap_side is None
+        for handle, geometry in zip(self.resize_handles, geometries):
+            handle.setGeometry(geometry)
+            handle.setVisible(visible)
+
     def update_overlay_geometry(self):
-        is_max = self.isMaximized()
-        if is_max:
+        if self._interactive_resize:
+            return
+        is_full_area = self.isMaximized() or self._snap_side is not None
+        if is_full_area:
             self.main_layout.setContentsMargins(0, 0, 0, 0)
             self.container.setStyleSheet(
                 f"QWidget#container {{ background:{self.bg_inner}; border-radius: 0px; }}"
@@ -1222,18 +1471,46 @@ class MainWindow(QWidget):
             self.border_overlay.show()
             self.shadow_effect.setEnabled(True)
             QTimer.singleShot(0, self._sync_border_geometry)
-        self.size_grip.setVisible(not is_max)
+        self.size_grip.setVisible(not self.isMaximized())
 
     def _sync_border_geometry(self):
-        if not self.isMaximized():
+        if not self.isMaximized() and self._snap_side is None:
             self.border_overlay.setGeometry(self.container.geometry())
+
+    def begin_interactive_resize(self):
+        if self._interactive_resize:
+            return
+        self._interactive_resize = True
+        self.border_overlay.hide()
+        self.shadow_effect.setEnabled(False)
+        self.resize_overlay.setGeometry(self.container.geometry())
+        self.resize_overlay.show()
+        self.resize_overlay.raise_()
+        self.resize_overlay.repaint()
+        self.container.setUpdatesEnabled(False)
+
+    def finish_interactive_resize(self):
+        if not self._interactive_resize:
+            return
+        self.container.setUpdatesEnabled(True)
+        self.resize_overlay.hide()
+        self._interactive_resize = False
+        self.update_overlay_geometry()
+        self.container.update()
 
     def resizeEvent(self, event):
         if self.left_container.isVisible():
             self._apply_explorer_width()
         self.update_mask()
         self.update_overlay_geometry()
+        if self._interactive_resize:
+            self.resize_overlay.setGeometry(self.container.geometry())
+            self.resize_overlay.raise_()
         super().resizeEvent(event)
+        self._sync_resize_handles()
+        if self._interactive_resize:
+            for handle in self.resize_handles:
+                handle.raise_()
 
     def showEvent(self, event):
         super().showEvent(event)

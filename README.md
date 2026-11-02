@@ -73,15 +73,15 @@ Lumos Editor currently supports:
 
 macOS has not been tested or optimized and is not officially supported. Some features may not work as expected.
 
-### Known Windows Window-Resizing Issue
+### Interactive Window Resizing
 
-On Windows, the window can be resized using the size grip in the bottom-right corner of the status bar.
+Drag any window edge or corner to resize it; the mouse cursor indicates the resize direction. You can also use the size grip in the bottom-right corner of the status bar.
 
-During resizing, the window border and drop shadow may flicker, and a fake menu bar may temporarily appear. This is not the actual menu bar; the actual menu bar is normally hidden behind the arrow icon in the top-right corner of the title bar.
+While the mouse is dragging the size grip, the editor temporarily pauses content rendering and hides the window border and drop shadow. The editor background is shown during the resize, and the full interface is rendered again when dragging ends. This avoids border, shadow, and menu-bar flicker.
 
-This is a known issue and does not affect typing or dragging the window.
+The menu bar is normally hidden behind the arrow icon in the top-right corner of the title bar.
 
-This behavior has not yet been verified on Linux. Contributions to investigate and resolve this issue are welcome.
+Use **Alt + Left/Right Arrow** to place the editor on either half of the active monitor, **Alt + Up Arrow** to maximize, and **Alt + Down Arrow** to restore it. Windows reserves the **Windows + Arrow** shortcuts for native window snapping, which is not supported by this custom frameless window.
 
 ## Installation
 
