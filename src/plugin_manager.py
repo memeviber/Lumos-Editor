@@ -3,7 +3,7 @@ import os
 import threading
 import zipfile
 
-from PyQt5.QtCore import QObject, QRunnable, Qt, QThread, QThreadPool, pyqtSignal
+from PyQt5.QtCore import QObject, QRunnable, QSize, Qt, QThread, QThreadPool, pyqtSignal
 from PyQt5.QtGui import QIcon, QKeySequence, QPixmap
 from PyQt5.QtWidgets import (
     QAction,
@@ -705,14 +705,32 @@ class PluginDialog(ThemedBaseDialog):
                 border-radius: 4px;
                 padding: 4px;
                 outline: none;
+                margin: 0px 16px;
+            }}
+            QListWidget:focus {{
+                border: 1px solid {theme.color13};
             }}
             QListWidget::item {{
-                padding: 4px;
+                padding: 5px 4px;
                 border-radius: 3px;
             }}
-            QListWidget::item:selected {{
+            QListWidget::item:hover {{
                 background-color: {theme.color9};
-                color: {theme.color31};
+            }}
+            QListWidget::indicator {{
+                width: 16px;
+                height: 16px;
+                background-color: {theme.color2};
+                border: 1px solid {theme.color23};
+                border-radius: 3px;
+            }}
+            QListWidget::indicator:hover {{
+                border-color: {theme.color35};
+            }}
+            QListWidget::indicator:checked {{
+                background-color: {theme.color35};
+                border-color: {theme.color35};
+                image: url(resources:/checkmark.png);
             }}
             """
         )
@@ -724,11 +742,13 @@ class PluginDialog(ThemedBaseDialog):
             "Check the plugins you want to enable. Changes will apply after restarting."
         )
         self.info_label.setWordWrap(True)
-        self.info_label.setContentsMargins(16, 10, 16, 0)
+        self.info_label.setContentsMargins(16, 10, 16, 8)
         self.layout.addWidget(self.info_label)
         self.plugin_list_widget = QListWidget()
         self.plugin_list_widget.setMinimumHeight(220)
-        self.plugin_list_widget.setContentsMargins(0, 0, 0, 0)
+        self.plugin_list_widget.setSpacing(2)
+        self.plugin_list_widget.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.plugin_list_widget.setContentsMargins(12, 4, 12, 4)
         self.layout.addWidget(self.plugin_list_widget)
         self.populate_plugin_list()
         self.button_box = QDialogButtonBox(
@@ -741,15 +761,13 @@ class PluginDialog(ThemedBaseDialog):
         button_layout.addStretch(1)
         button_layout.addWidget(self.button_box)
         self.layout.addLayout(button_layout)
-        self.plugin_list_widget.setStyleSheet(
-            """
-            QListWidget {{
-                margin: 8px 16px 0px;
-            }}
-            """
-        )
 
     def populate_plugin_list(self):
+        if not self.plugin_manager.discovered_plugins:
+            empty_item = QListWidgetItem("No plugins found", self.plugin_list_widget)
+            empty_item.setFlags(Qt.NoItemFlags)
+            return
+
         for filename, manifest in self.plugin_manager.discovered_plugins.items():
             item = QListWidgetItem(self.plugin_list_widget)
             name = manifest.get("name", filename)
@@ -758,11 +776,13 @@ class PluginDialog(ThemedBaseDialog):
             is_enabled = self.config_manager.is_plugin_enabled(filename)
             item.setCheckState(Qt.Checked if is_enabled else Qt.Unchecked)
             item.setData(Qt.UserRole, filename)
+            item.setSizeHint(QSize(0, 32))
 
     def accept(self):
         for i in range(self.plugin_list_widget.count()):
             item = self.plugin_list_widget.item(i)
             filename = item.data(Qt.UserRole)
-            is_enabled = item.checkState() == Qt.Checked
-            self.config_manager.set_plugin_enabled(filename, is_enabled)
+            if filename is not None:
+                is_enabled = item.checkState() == Qt.Checked
+                self.config_manager.set_plugin_enabled(filename, is_enabled)
         super().accept()
