@@ -1,3 +1,5 @@
+import logging
+
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QHBoxLayout,
@@ -14,6 +16,8 @@ from .themed_dialog import (
     set_input_placeholder_color,
     themed_input_stylesheet,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class CommandPalette(ThemedBaseDialog):
@@ -96,6 +100,7 @@ class CommandPalette(ThemedBaseDialog):
 
     def execute_command(self, item):
         action = item.data(Qt.UserRole)
+        logger.debug("Executing command palette action: %s", item.text())
         self.accept()
         if action:
             action()

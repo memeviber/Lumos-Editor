@@ -1,4 +1,5 @@
 import difflib
+import logging
 
 from PyQt5.QtCore import QEvent, Qt
 from PyQt5.QtGui import QColor
@@ -12,6 +13,8 @@ from PyQt5.QtWidgets import (
 )
 
 from .theme_manager import theme
+
+logger = logging.getLogger(__name__)
 
 
 class SplitTab(QWidget):
@@ -81,6 +84,7 @@ class SplitTab(QWidget):
         right_sb.valueChanged.connect(sync_to_left)
 
     def run_diff(self):
+        logger.debug("Comparing split editor contents")
         left_ed = self.left_editor_tab.editor
         right_ed = self.right_editor_tab.editor
         for ed in (left_ed, right_ed):

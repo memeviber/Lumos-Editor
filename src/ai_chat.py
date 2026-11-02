@@ -1,5 +1,6 @@
 import base64
 import json
+import logging
 import os
 import uuid
 from datetime import datetime
@@ -34,6 +35,8 @@ from .theme_manager import theme
 from .themed_dialog import ThemedFileDialog as QFileDialog
 from .themed_dialog import ThemedInputDialog as QInputDialog
 from .themed_dialog import set_input_placeholder_color, themed_input_stylesheet
+
+logger = logging.getLogger(__name__)
 
 MARKDOWN_CSS = f"""
 body {{
@@ -175,6 +178,7 @@ class GeminiWorker(QThread):
         self.config = config
 
     def run(self):
+        logger.info("AI response stream started: model=%s", self.model)
         try:
             full_response_text = ""
             stream = self.client.models.generate_content_stream(
@@ -187,7 +191,12 @@ class GeminiWorker(QThread):
                     full_response_text += chunk.text
                     self.chunk_received.emit(full_response_text)
             self.finished_streaming.emit()
+            logger.info(
+                "AI response stream completed: characters=%d",
+                len(full_response_text),
+            )
         except Exception as e:
+            logger.exception("AI response stream failed")
             self.error_occurred.emit(str(e))
 
 
@@ -720,6 +729,7 @@ class AIChat(QWidget):
             "messages": msgs,
         }
         path = self._session_file_path(session_id)
+        logger.info("Saving AI chat session: messages=%d", len(msgs))
         with open(path, "w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False, indent=2)
         cfg = self._load_config()
@@ -741,6 +751,7 @@ class AIChat(QWidget):
         self.current_session_id = session_id
         self.current_session_name = name
         self.refresh_session_menu()
+        logger.info("AI chat session saved: messages=%d", len(msgs))
         return path
 
     def refresh_session_menu(self):
@@ -767,6 +778,7 @@ class AIChat(QWidget):
         self.session_button.setMenu(menu)
 
     def load_session(self, session_id):
+        logger.info("Loading AI chat session")
         path = self._session_file_path(session_id)
         if not path.exists():
             msg_box = QMessageBox(self)
@@ -779,6 +791,7 @@ class AIChat(QWidget):
             with open(path, "r", encoding="utf-8") as f:
                 payload = json.load(f)
         except Exception as e:
+            logger.exception("Could not load AI chat session")
             msg_box = QMessageBox(self)
             msg_box.setIcon(QMessageBox.Warning)
             msg_box.setWindowTitle("Load Session")
@@ -819,6 +832,7 @@ class AIChat(QWidget):
             with open(file_path, "r", encoding="utf-8") as f:
                 payload = json.load(f)
         except Exception as e:
+            logger.exception("Could not open AI chat session JSON file")
             msg_box = QMessageBox(self)
             msg_box.setIcon(QMessageBox.Warning)
             msg_box.setWindowTitle("Open Session")
@@ -855,6 +869,12 @@ class AIChat(QWidget):
             or not self.client
             or (self.worker and self.worker.isRunning())
         ):
+            logger.debug(
+                "Skipping AI request: empty_message=%s, client_available=%s, worker_busy=%s",
+                not user_message,
+                self.client is not None,
+                bool(self.worker and self.worker.isRunning()),
+            )
             return
         context_content = []
         context_files = self.get_context_files()
@@ -867,6 +887,7 @@ class AIChat(QWidget):
                             f"Content of {file_path}:\n```\n{content}\n```"
                         )
                 except Exception as e:
+                    logger.exception("Could not read AI context file")
                     context_content.append(f"Error reading {file_path}: {str(e)}")
         self.add_user_message_widget(user_message)
         self.input_text.clear()
@@ -1213,6 +1234,12 @@ Resolve any conflict between context and inference in favor of the context.
 """
 
         model = "gemini-2.5-flash"
+        logger.info(
+            "Submitting AI request: model=%s, conversation_items=%d, context_files=%d",
+            model,
+            len(self.conversation_history),
+            len(context_files),
+        )
         tools = [types.Tool(google_search=types.GoogleSearch())]
         generate_content_config = types.GenerateContentConfig(
             system_instruction=types.Part.from_text(text=system_instruction),

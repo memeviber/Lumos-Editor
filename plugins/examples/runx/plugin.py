@@ -1,3 +1,4 @@
+import logging
 import json
 import os
 import shlex
@@ -5,6 +6,8 @@ import subprocess
 import webbrowser
 from pathlib import Path
 from shutil import which
+
+logger = logging.getLogger(__name__)
 
 BASE_DIR = Path.cwd()
 CONFIG_FILE = BASE_DIR / "runner_commands.json"
@@ -35,6 +38,7 @@ def detect_python_interpreter():
 
 def load_commands_config():
     if not CONFIG_FILE.exists():
+        logger.error("RunX configuration file is missing")
         lumos.show_error(  # type: ignore
             "Config Error",
             "runner_commands.json was not found in the application root.",
@@ -44,6 +48,7 @@ def load_commands_config():
         with CONFIG_FILE.open("r", encoding="utf-8") as f:
             data = json.load(f)
     except Exception as e:
+        logger.exception("Could not read RunX configuration")
         lumos.show_error("Config Error", f"Failed to read runner_commands.json:\n{e}")  # type: ignore
         return {}
     if not isinstance(data, dict):
@@ -88,9 +93,11 @@ def run_current_file(args=""):
     ):  # PyQt5 QAction.triggered passes a boolean, we ignore it and treat it as no args
         args = ""
     if not filepath:
+        logger.warning("RunX requested without an open file")
         lumos.show_warning("Run File", "No file is currently open to run!")  # type: ignore
         return
     if not lumos.is_saved():  # type: ignore
+        logger.warning("RunX refused to execute an unsaved file")
         lumos.show_warning(  # type: ignore
             "Run File",
             "This file has unsaved changes. Please save it first before running!",
@@ -118,10 +125,12 @@ def run_current_file(args=""):
         )
         return
     cmd = render_command(raw_cmd, filepath, args)
+    logger.info("Running current file through the integrated terminal: ext=%s", ext)
     if os.name == "nt" and (cmd.strip().startswith("'") or cmd.strip().startswith('"')):
         cmd = "& " + cmd
     success = lumos.run_cmd_in_terminal(cmd)  # type: ignore
     if not success:
+        logger.error("Integrated terminal is unavailable for RunX")
         lumos.show_warning(  # type: ignore
             "Terminal Error", "Terminal not found. Please open the terminal first!"
         )

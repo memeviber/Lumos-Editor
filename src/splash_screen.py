@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 from PyQt5.QtCore import QRectF, Qt
@@ -6,9 +7,12 @@ from PyQt5.QtWidgets import QApplication, QSplashScreen
 
 from .theme_manager import theme
 
+logger = logging.getLogger(__name__)
+
 
 class StartupSplash(QSplashScreen):
     def __init__(self):
+        logger.debug("Creating startup splash screen")
         super().__init__(self._create_pixmap(), Qt.WindowStaysOnTopHint)
         self.showMessage(
             "Starting Lumos Editor...",

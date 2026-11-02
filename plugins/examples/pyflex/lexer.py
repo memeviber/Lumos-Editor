@@ -1,10 +1,12 @@
 import array
+import logging
 
 import jedi
 import tree_sitter_python as tspython
 from PyQt5 import QtCore
 from tree_sitter import Language, Parser, Query, QueryCursor
 
+logger = logging.getLogger(__name__)
 PY_LANGUAGE = Language(tspython.language())
 
 PYTHON_QUERY = Query(
@@ -50,6 +52,7 @@ class PyTreeSitterWorker(QtCore.QObject):
 
     def __init__(self):
         super().__init__()
+        logger.debug("Initializing PyFlex syntax worker")
         self.parser = Parser(PY_LANGUAGE)
         self.current_tree = None
         self.latest_generation = 0
@@ -57,6 +60,11 @@ class PyTreeSitterWorker(QtCore.QObject):
 
     @QtCore.pyqtSlot(bytes, list, int, int, int)
     def process_ast(self, data, edits, start_pos, end_pos, generation):
+        logger.debug(
+            "PyFlex AST processing started: generation=%d, bytes=%d",
+            generation,
+            len(data),
+        )
         STYLE_DEFAULT = 0
         STYLE_KEYWORD = 1
         STYLE_STRING = 2
@@ -246,6 +254,7 @@ class PyFlex(lumos.BaseLexer):  # type: ignore
             }
             self.edits_queue.append(edit_info)
         except Exception:
+            logger.exception("PyFlex failed to process Python syntax tree")
             pass
 
     def _do_style_text(self, start: int, end: int):

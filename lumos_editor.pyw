@@ -1551,6 +1551,7 @@ class MainWindow(QWidget):
             editor.paste()
 
     def new_file(self):
+        logger.info("Creating new editor tab")
         tab = EditorTab(
             main_window=self,
             plugin_manager=self.plugin_manager,
@@ -1580,11 +1581,13 @@ class MainWindow(QWidget):
 
     def open_specific_file(self, path, in_split=False):
         if not path or not os.path.exists(path):
+            logger.warning("Cannot open missing file")
             QMessageBox.warning(self, "Error", f"File not found:\n{path}")
             if path in self.recent_files:
                 self.recent_files.remove(path)
             return None
         abs_path = os.path.abspath(path)
+        logger.info("Opening file: path=%s, split_view=%s", abs_path, in_split)
         if not in_split:
             for i in range(self.tabs.count()):
                 tab = self.tabs.widget(i)
@@ -1593,6 +1596,7 @@ class MainWindow(QWidget):
                     and tab.filepath
                     and os.path.abspath(tab.filepath) == abs_path
                 ):
+                    logger.debug("Reusing existing editor tab for file")
                     self.tabs.setCurrentIndex(i)
                     return tab
         try:
@@ -1637,6 +1641,7 @@ class MainWindow(QWidget):
                     tab.editor.setText(content)
                     tab.save()
                 except (UnicodeDecodeError, IOError):
+                    logger.exception("Could not read file as text")
                     QMessageBox.warning(
                         self,
                         "Warning",
@@ -1644,6 +1649,7 @@ class MainWindow(QWidget):
                     )
                     return None
             if in_split:
+                logger.info("File opened in split view: type=%s", file_ext)
                 return tab
             index = self.tabs.addTab(tab, tab.tabname)
             self.tabs.setCurrentIndex(index)
@@ -1655,9 +1661,11 @@ class MainWindow(QWidget):
                         "file_opened", filepath=abs_path, tab=tab
                     )
             except Exception:
-                pass
+                logger.exception("File-opened plugin hook failed")
+            logger.info("File opened successfully: type=%s", file_ext)
             return tab
         except Exception as e:
+            logger.exception("Could not open file")
             QMessageBox.warning(self, "Error", f"Could not open file: {str(e)}")
             return None
 
@@ -1674,6 +1682,7 @@ class MainWindow(QWidget):
                 SourceControlTab,
             ),
         ):
+            logger.debug("Save ignored for a non-editor tab")
             return False
         is_checking_content_equal = False
         if isinstance(current, SplitTab):
@@ -1708,6 +1717,11 @@ class MainWindow(QWidget):
             self.close_tab(self.tabs.currentIndex())
         path = target_tab.filepath
         content_to_save = editor.text()
+        logger.info(
+            "Saving file: path=%s, characters=%d",
+            path,
+            len(content_to_save),
+        )
         try:
             if os.path.exists(path):
                 with open(path, "r", encoding="utf-8") as f:
@@ -1740,8 +1754,10 @@ class MainWindow(QWidget):
                 return True
             target_tab.save()
             self.show_status_message(f"File saved: {path}")
+            logger.info("File saved successfully: path=%s", path)
             return True
         except Exception as e:
+            logger.exception("Could not save file")
             QMessageBox.warning(self, "Error", f"Could not save file: {str(e)}")
             return False
 
@@ -1841,6 +1857,7 @@ class MainWindow(QWidget):
 
     def close_file_tab(self, filepath):
         abs_path = os.path.abspath(filepath)
+        logger.info("Closing editor tabs for file: path=%s", abs_path)
         tabs_to_remove_indices = set()
         filepaths_to_remove = set()
         for i in range(self.tabs.count()):
@@ -2893,22 +2910,15 @@ class MainWindow(QWidget):
                         tab.editor.setText(content)
                         tab.editor.setCursorPosition(line, col)
                         tab.save()
-                except Exception as e:
-                    print(f"Error reloading file {filepath}: {e}")
+                except Exception:
+                    logger.exception("Could not reload changed file")
                 break
 
 
 def main():
     os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
-    log_dir = os.path.join(os.path.expanduser("~"), ".lumos_editor")
-    os.makedirs(log_dir, exist_ok=True)
-    logging.basicConfig(
-        filename=os.path.join(log_dir, "startup.log"),
-        filemode="a",
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(message)s",
-    )
     logger.info("===== Application startup =====")
+    logger.debug("Python=%s, platform=%s", sys.version.split()[0], sys.platform)
 
     try:
         QApplication.setHighDpiScaleFactorRoundingPolicy(
@@ -2931,8 +2941,8 @@ def main():
             from src.theme_manager import theme
 
             theme.reload_theme()
-        except Exception as e:
-            print(f"Error loading theme at startup: {e}")
+        except Exception:
+            logger.exception("Could not load theme at startup")
         splash = StartupSplash()
         splash.show()
         app.processEvents()

@@ -1,3 +1,4 @@
+import logging
 import os
 import shutil
 
@@ -5,6 +6,8 @@ from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import QAbstractItemView, QStyledItemDelegate, QTreeView
 
 from .message_box import QMessageBox
+
+logger = logging.getLogger(__name__)
 
 
 class FileTreeDelegate(QStyledItemDelegate):
@@ -133,6 +136,7 @@ class FileTreeView(QTreeView):
                     event.ignore()
                     return
             try:
+                logger.info("Moving file-tree item: %s -> %s", source_path, new_path)
                 self.main_window.close_file_tab(source_path)
                 if os.path.exists(new_path):
                     self.main_window.close_file_tab(new_path)
@@ -142,7 +146,9 @@ class FileTreeView(QTreeView):
                     shutil.move(source_path, new_path)
                 else:
                     shutil.move(source_path, new_path)
+                logger.info("File-tree item moved successfully")
             except Exception as e:
+                logger.exception("Could not move file-tree item")
                 QMessageBox.warning(self, "Error", f"Could not move item: {str(e)}")
                 return
         event.accept()

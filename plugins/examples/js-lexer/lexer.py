@@ -1,4 +1,8 @@
 # You need to install tree-sitter and tree-sitter-javascript with: pip install tree-sitter tree-sitter-javascript
+import logging
+
+logger = logging.getLogger(__name__)
+
 try:
     import re
 
@@ -102,7 +106,7 @@ try:
             ]
         }
 
-    print(tsjavascript.language())
+    logger.debug("JavaScript lexer dependencies loaded")
     JS_LANGUAGE = Language(tsjavascript.language())
 
     class JavaScriptLexer(lumos.PygmentsBaseLexer):  # type: ignore
@@ -389,10 +393,7 @@ try:
             return m.group(1) if m else ""
 
         def debug_tree(self, node, src, level=0):
-            node_text = src[node.start_byte : node.end_byte][:30].decode(
-                "utf-8", "ignore"
-            ) + ("..." if node.end_byte - node.start_byte > 30 else "")
-            print("  " * level + f"{node.type.encode('utf-8', 'ignore')}: {node_text}")
+            logger.debug("JavaScript syntax tree node visited: type=%s", node.type)
             for ch in node.children:
                 self.debug_tree(ch, src, level + 1)
 
@@ -455,6 +456,7 @@ try:
             self.apis.prepare()
 
 except ImportError:
+    logger.exception("JavaScript lexer dependencies are unavailable")
     lumos.plugin_manager._run_main_op(  # type: ignore
         "warning",
         "JavaScript Lexer",

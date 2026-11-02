@@ -482,6 +482,9 @@ The following shortcuts are documented for Lumos Editor.
 - Activate the environment in which Lumos dependencies were installed.
 - Run `python -m pip install -r requirements.txt` again if necessary.
 - Check the terminal output for missing modules or Qt-related errors.
+- Review `~/.lumos_editor/startup.log` for detailed startup and runtime logs (on Windows: `%USERPROFILE%\.lumos_editor\startup.log`). The log rotates at 5 MB and keeps up to three backups.
+
+Logs include timestamps, severity, module, and thread information. Logging calls avoid recording document text or AI prompts.
 
 ### A Plugin Does Not Load
 

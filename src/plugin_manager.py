@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import threading
 import zipfile
@@ -25,6 +26,8 @@ from .split_tab import SplitTab
 from .theme_manager import theme
 from .themed_dialog import ThemedBaseDialog, ThemedDialogTitleBar
 from .themed_dialog import ThemedInputDialog as QInputDialog
+
+logger = logging.getLogger(__name__)
 
 
 class PluginInfo:
@@ -254,6 +257,7 @@ class PluginManager:
             return None
 
     def _scan_for_plugins(self):
+        logger.info("Scanning plugin directory")
         self.discovered_plugins.clear()
         for filename in os.listdir(self.plugins_dir):
             if filename.endswith(".lmp"):
@@ -271,10 +275,14 @@ class PluginManager:
                         manifest = json.loads(manifest_data)
                         self.discovered_plugins[filename] = manifest
                 except Exception as e:
+                    logger.exception("Could not scan plugin archive: %s", filename)
                     error_message = f"Failed to scan plugin '{filename}':\n\n{e}"
                     QMessageBox.warning(
                         self.parent_widget, "Plugin Scan Error", error_message
                     )
+        logger.info(
+            "Plugin scan completed: discovered=%d", len(self.discovered_plugins)
+        )
 
     def _get_active_editor_tab(self):
         current_widget = self.parent_widget.tabs.currentWidget()
@@ -424,7 +432,12 @@ class PluginManager:
 
     def load_enabled_plugins(self):
         if self.plugins_loaded:
+            logger.debug("Plugin loading skipped: plugins are already loaded")
             return
+        logger.info(
+            "Loading enabled plugins: discovered=%d",
+            len(self.discovered_plugins),
+        )
         self.extension_map.clear()
         self._pending_tasks = 0
         self._running_tasks.clear()
@@ -459,6 +472,7 @@ class PluginManager:
                 tasks_to_start.append(task)
 
         self._pending_tasks = len(tasks_to_start)
+        logger.info("Plugin load tasks queued: count=%d", self._pending_tasks)
         self._running_tasks.extend(tasks_to_start)
 
         if self._pending_tasks == 0:
@@ -468,6 +482,7 @@ class PluginManager:
                 self._thread_pool.start(task)
 
     def _on_plugin_task_finished(self, filename):
+        logger.info("Plugin loaded successfully: %s", filename)
         self._pending_tasks -= 1
         if self._pending_tasks <= 0:
             self.plugins_loaded = True
@@ -476,6 +491,7 @@ class PluginManager:
                 self.apply_menu_actions(self._menus_ref)
 
     def _on_plugin_task_failed(self, filename, error_text):
+        logger.error("Plugin failed to load: %s: %s", filename, error_text)
         QMessageBox.warning(
             self.parent_widget,
             "Plugin Load Error",
@@ -499,6 +515,7 @@ class PluginManager:
             try:
                 fn(**kwargs)
             except Exception as e:
+                logger.exception("Plugin hook failed: %s", event_name)
                 QMessageBox.warning(
                     self.parent_widget,
                     "Plugin Hook Error",
@@ -583,6 +600,7 @@ class PluginManager:
             item["applied"] = True
 
     def unload_plugins(self):
+        logger.info("Unloading plugins: count=%d", len(self.menu_actions))
         self.extension_map.clear()
         with self._plugin_lock:
             self.hooks.clear()
@@ -598,7 +616,7 @@ class PluginManager:
             try:
                 item["action"].deleteLater()
             except Exception:
-                pass
+                logger.exception("Could not dispose of a plugin menu action")
         self.menu_actions.clear()
         self.plugins_loaded = False
 

@@ -1,8 +1,11 @@
 import base64
+import logging
 import textwrap
 import urllib.parse
 
 from mistune import HTMLRenderer, create_markdown
+
+logger = logging.getLogger(__name__)
 
 
 class CustomListRenderer(HTMLRenderer):
@@ -23,6 +26,7 @@ class CustomListRenderer(HTMLRenderer):
         return f"<li>{'<br>'.join(parts)}</li>"
 
     def block_code(self, code, info=None):
+        logger.debug("Rendering Markdown code block: characters=%d", len(code))
         code = textwrap.dedent(code)
         code_lines = code.rstrip().split("\n")
         raw_code = "\n".join(code_lines)

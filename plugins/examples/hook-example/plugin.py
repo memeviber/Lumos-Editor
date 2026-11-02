@@ -1,4 +1,10 @@
+import logging
+
+logger = logging.getLogger(__name__)
+
+
 def on_file_opened(file_path, _):
+    logger.info("Plugin received file-opened event")
     lumos.show_message(f"File opened: {file_path}")  # type: ignore
 
 

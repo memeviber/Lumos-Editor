@@ -1,3 +1,5 @@
+import logging
+
 from PyQt5.QtCore import QEvent, QSize, Qt, pyqtSignal
 from PyQt5.QtGui import QColor, QFont, QIcon, QPalette
 from PyQt5.QtWidgets import (
@@ -17,6 +19,8 @@ from PyQt5.QtWidgets import (
 )
 
 from .theme_manager import theme
+
+logger = logging.getLogger(__name__)
 
 DIALOG_RADIUS = 8
 
@@ -169,6 +173,7 @@ class ThemedBaseDialog(QDialog):
         window_flags=None,
         object_name="ThemedDialogContainer",
     ):
+        logger.debug("Creating themed dialog: class=%s", type(self).__name__)
         if window_flags is None:
             super().__init__(parent)
         else:

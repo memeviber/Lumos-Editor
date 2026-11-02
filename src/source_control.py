@@ -1,3 +1,4 @@
+import logging
 import os
 import shutil
 import time
@@ -22,6 +23,8 @@ from PyQt5.QtWidgets import (
 from .message_box import QMessageBox
 from .theme_manager import theme
 from .themed_dialog import ThemedInputDialog as QInputDialog
+
+logger = logging.getLogger(__name__)
 
 
 class GitPoller(QThread):
@@ -303,6 +306,7 @@ class SourceControlTab(QWidget):
     def initialize_git(self):
         project_path = self.main_window.current_project_dir
         if not project_path:
+            logger.info("Source control disabled: no project folder open")
             self.repo = None
             self.branch_btn.setText("No folder open")
             self.changes_tree.clear()
@@ -310,13 +314,16 @@ class SourceControlTab(QWidget):
             return
         try:
             self.repo = Repo(project_path)
+            logger.info("Git repository initialized")
             self.update_git_status()
         except InvalidGitRepositoryError:
+            logger.info("Project folder is not a Git repository")
             self.repo = None
             self.branch_btn.setText("Not a git repository")
             self.changes_tree.clear()
             self.update_git_status()
         except Exception:
+            logger.exception("Could not initialize Git repository")
             self.repo = None
             self.branch_btn.setText("Error initializing repo")
             self.changes_tree.clear()
@@ -395,6 +402,12 @@ class SourceControlTab(QWidget):
             self.staged_label.setText(f"\u2022 Staged: {staged_count}")
             self.modified_label.setText(f"\u2022 Modified: {modified_count}")
             self.untracked_label.setText(f"\u2022 Untracked: {untracked_count}")
+            logger.debug(
+                "Git status refreshed: staged=%d, modified=%d, untracked=%d",
+                staged_count,
+                modified_count,
+                untracked_count,
+            )
             if self.changes_tree.topLevelItemCount() == 0:
                 no_changes_item = QTreeWidgetItem(["No changes", "Working tree clean"])
                 no_changes_item.setData(0, Qt.UserRole, {"type": "info"})
@@ -418,9 +431,10 @@ class SourceControlTab(QWidget):
                         if commits_ahead:
                             can_push = True
                 except Exception:
-                    pass
+                    logger.exception("Could not determine whether branch can be pushed")
                 self.push_button.setEnabled(can_push)
         except Exception as e:
+            logger.exception("Could not refresh Git status")
             self.branch_btn.setText(f"Error: {str(e)}")
             self.commit_button.setEnabled(False)
             self.push_button.setEnabled(False)
@@ -467,6 +481,7 @@ class SourceControlTab(QWidget):
         self.main_window.open_specific_file(abs_path)
 
     def stage_file(self, file_path):
+        logger.info("Staging file in Git")
         self._git_busy = True
         try:
             self.repo.git.add(file_path)
@@ -475,6 +490,7 @@ class SourceControlTab(QWidget):
             self.update_git_status()
 
     def unstage_file(self, file_path):
+        logger.info("Unstaging file in Git")
         self._git_busy = True
         try:
             self.repo.git.reset("HEAD", file_path)
@@ -509,6 +525,7 @@ class SourceControlTab(QWidget):
                 self.update_git_status()
 
     def stage_all(self):
+        logger.info("Staging all changes in Git")
         self._git_busy = True
         try:
             self.repo.git.add(A=True)
@@ -517,6 +534,7 @@ class SourceControlTab(QWidget):
             self.update_git_status()
 
     def unstage_all(self):
+        logger.info("Unstaging all changes in Git")
         self._git_busy = True
         try:
             self.repo.git.reset("HEAD")
@@ -604,12 +622,14 @@ class SourceControlTab(QWidget):
             self.main_window, "Commit Changes", "Enter commit message:", ""
         )
         if ok and message.strip():
+            logger.info("Creating Git commit")
             self._git_busy = True
             self.show_progress(True)
             try:
                 self.repo.index.commit(message.strip())
                 self.branch_btn.setText(f"Branch: {self.repo.active_branch.name}")
             except Exception as e:
+                logger.exception("Git commit failed")
                 QMessageBox.warning(self.main_window, "Commit Failed", str(e))
             finally:
                 self.show_progress(False)
@@ -622,11 +642,13 @@ class SourceControlTab(QWidget):
         self._git_busy = True
         self.show_progress(True)
         try:
+            logger.info("Pushing Git changes")
             remote = self.repo.remote()
             branch = self.repo.active_branch
             remote.push(branch)
             self.branch_btn.setText("Changes pushed")
         except Exception as e:
+            logger.exception("Git push failed")
             QMessageBox.warning(self.main_window, "Push Failed", str(e))
         finally:
             self.show_progress(False)
@@ -639,10 +661,12 @@ class SourceControlTab(QWidget):
         self._git_busy = True
         self.show_progress(True)
         try:
+            logger.info("Pulling Git changes")
             remote = self.repo.remote()
             remote.pull()
             self.branch_btn.setText("Changes pulled")
         except Exception as e:
+            logger.exception("Git pull failed")
             QMessageBox.warning(self.main_window, "Pull Failed", str(e))
         finally:
             self.show_progress(False)

@@ -1,6 +1,7 @@
 import base64
 import hashlib
 import inspect
+import logging
 import mimetypes
 import os
 import re
@@ -37,6 +38,8 @@ from src.lexer import (
 
 from . import md_renderer
 from .theme_manager import theme
+
+logger = logging.getLogger(__name__)
 
 
 class AutoPairEventFilter(QObject):
@@ -1097,6 +1100,7 @@ class EditorTab(QWidget):
             self.auto_timer.start(500)
 
     def save(self):
+        logger.debug("Editor tab marked saved: has_filepath=%s", bool(self.filepath))
         self.is_modified = False
         current_index = self.main_window.tabs.currentIndex()
         current_text = self.main_window.tabs.tabText(current_index)

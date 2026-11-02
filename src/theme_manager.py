@@ -1,8 +1,11 @@
 import json
+import logging
 import os
 from pathlib import Path
 
 from PyQt5.QtGui import QColor, QPainter, QPixmap
+
+logger = logging.getLogger(__name__)
 
 
 def blend_color(base_color: QColor, target_color: QColor, ratio: float) -> str:
@@ -81,10 +84,11 @@ class LumosThemeManager:
                         cfg = json.load(f)
                         theme_name = cfg.get("theme", "default")
                 except Exception:
-                    pass
+                    logger.exception("Could not load theme preference")
 
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         theme_path = os.path.join(base_dir, "themes", theme_name, "theme.json")
+        logger.info("Loading theme: %s", theme_name)
 
         theme_data = {}
         if os.path.exists(theme_path):
@@ -92,7 +96,7 @@ class LumosThemeManager:
                 with open(theme_path, "r", encoding="utf-8") as f:
                     theme_data = json.load(f)
             except Exception:
-                pass
+                logger.exception("Could not parse theme file: %s", theme_path)
 
         t = theme_data.get("theme", {})
         c_paper = QColor(t.get("paper-color", "#1e1e1e"))
@@ -236,4 +240,4 @@ class LumosThemeManager:
 try:
     theme = LumosThemeManager()
 except Exception:
-    pass
+    logger.exception("Could not initialize theme manager")

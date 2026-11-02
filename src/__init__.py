@@ -1,3 +1,7 @@
+import logging
+
+from logging_config import configure_logging
+
 from .ai_chat import AIChat
 from .cmd_palette import CommandPalette
 from .config_manager import ConfigManager
@@ -12,6 +16,8 @@ from .source_control import SourceControlTab
 from .split_tab import SplitTab
 from .terminal import Terminal
 from .welcome_screen import WelcomeScreen
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "EditorTab",
@@ -33,3 +39,6 @@ __all__ = [
     "Terminal",
     "StartupSplash",
 ]
+
+configure_logging()
+logger.debug("Lumos editor package initialized")

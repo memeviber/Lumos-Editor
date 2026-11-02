@@ -1,3 +1,4 @@
+import logging
 import os
 
 from PyQt5.QtCore import QSize, Qt, QUrl
@@ -17,12 +18,15 @@ from PyQt5.QtWidgets import (
 from .message_box import QMessageBox
 from .theme_manager import theme
 
+logger = logging.getLogger(__name__)
+
 
 class ImageViewer(QWidget):
     def __init__(self, filepath):
         super().__init__()
         self.is_modified = None
         self.filepath = os.path.abspath(filepath)
+        logger.info("Opening media viewer: type=%s", os.path.splitext(filepath)[1].lower())
         self.editor = None
         self.tabname = (
             os.path.splitext(os.path.basename(filepath))[0][:27] + "..."
@@ -46,17 +50,25 @@ class ImageViewer(QWidget):
                 self.label.setMovie(self.movie)
                 self.movie.start()
                 self.original_size = self.movie.currentPixmap().size()
+                logger.debug("Animated image loaded")
                 return
             else:
+                logger.warning("Could not decode animated image")
                 QMessageBox.warning(self, "Error", "Could not load GIF.")
                 self.close()
                 return
         self.original_pixmap = QPixmap(filepath)
         if self.original_pixmap.isNull():
+            logger.warning("Could not decode image file")
             QMessageBox.warning(self, "Error", "Could not load image.")
             self.close()
             return
         self.original_size = self.original_pixmap.size()
+        logger.debug(
+            "Image loaded: width=%d, height=%d",
+            self.original_size.width(),
+            self.original_size.height(),
+        )
         if self.original_size.width() > 2000 or self.original_size.height() > 2000:
             self.scale_factor = min(
                 2000 / self.original_size.width(), 2000 / self.original_size.height()
@@ -116,6 +128,7 @@ class ImageViewer(QWidget):
 class VideoViewer(QWidget):
     def __init__(self, filepath):
         super().__init__()
+        logger.info("Opening video viewer")
         self.setStyleSheet("background-color: black;")
         self.is_modified = None
         self.filepath = os.path.abspath(filepath)
@@ -237,6 +250,7 @@ class VideoViewer(QWidget):
 class AudioViewer(QWidget):
     def __init__(self, filepath):
         super().__init__()
+        logger.info("Opening audio viewer")
         self.is_modified = None
         self.filepath = os.path.abspath(filepath)
         self.tabname = (

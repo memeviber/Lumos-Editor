@@ -1,6 +1,12 @@
+import logging
+
+logger = logging.getLogger(__name__)
+
+
 class LumosAPI:
     def __init__(self, wrapped_obj):
         super().__setattr__("_wrapped_obj", wrapped_obj)
+        logger.debug("Initialized plugin API wrapper for %s", type(wrapped_obj).__name__)
 
     def __getattr__(self, name):
         if isinstance(self._wrapped_obj, dict):
@@ -19,11 +25,15 @@ class LumosAPI:
         if name == "_wrapped_obj":
             super().__setattr__(name, value)
         else:
+            logger.warning(
+                "Plugin attempted to modify protected API attribute: %s", name
+            )
             raise PermissionError(
                 "Plugins are not allowed to modify the Lumos API or its objects."
             )
 
     def __delattr__(self, name):
+        logger.warning("Plugin attempted to delete protected API attribute: %s", name)
         raise PermissionError(
             "Plugins are not allowed to delete attributes of the Lumos API."
         )

@@ -1,3 +1,4 @@
+import logging
 import json
 import keyword
 import os
@@ -29,6 +30,8 @@ from PyQt5.QtGui import QColor, QFont
 
 from .theme_manager import theme
 
+logger = logging.getLogger(__name__)
+
 
 class DefaultConfig(TypedDict):
     color: str
@@ -49,6 +52,11 @@ class BaseLexer(QsciLexerCustom):
         self.editor = editor
         self.apis = QsciAPIs(self)
         self.language_name = language_name
+        logger.debug(
+            "Initializing syntax lexer: language=%s, theme=%s",
+            language_name,
+            theme_name,
+        )
         self.theme_json = None
         themes_dir = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "themes"
@@ -127,6 +135,7 @@ class BaseLexer(QsciLexerCustom):
             with open(self.theme, "r", encoding="utf-8") as f:
                 self.theme_json = json.load(f)
         except Exception:
+            logger.exception("Could not load syntax theme: %s", self.theme)
             return
         paper_color = self.theme_json.get("theme", {}).get("paper-color")
         margin_color = self.theme_json.get("theme", {}).get("margin-color")
@@ -447,7 +456,7 @@ class PythonLexer(PygmentsBaseLexer):
             for completion in completions:
                 self.apis.add(completion.name)
         except Exception:
-            pass
+            logger.exception("Could not build Python completion suggestions")
         self.apis.prepare()
 
 

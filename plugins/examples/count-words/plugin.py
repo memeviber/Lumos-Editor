@@ -1,6 +1,13 @@
+import logging
+
+logger = logging.getLogger(__name__)
+
+
 def count_words_in_file():
+    logger.info("Counting words in active editor")
     text = lumos.get_editor_text()  # type: ignore
     word_count = len(text.split())
+    logger.debug("Word count completed: words=%d", word_count)
     lumos.show_message("Word Count", f"Word Count: {word_count}")  # type: ignore
 
 

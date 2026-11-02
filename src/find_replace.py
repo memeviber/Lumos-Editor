@@ -1,3 +1,4 @@
+import logging
 import re
 
 from PyQt5.QtCore import Qt
@@ -19,6 +20,8 @@ from .themed_dialog import (
     set_input_placeholder_color,
     themed_input_stylesheet,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class FindReplaceDialog(ThemedBaseDialog):
@@ -88,13 +91,16 @@ class FindReplaceDialog(ThemedBaseDialog):
 
     def find_next(self):
         if not self.editor:
+            logger.warning("Find requested without an active editor")
             return
         text = self.find_input.text()
         if not text:
+            logger.debug("Find requested with an empty search term")
             return
         case_sensitive = self.case_checkbox.isChecked()
         found = self.editor.findFirst(text, False, case_sensitive, False, True, True)
         if not found:
+            logger.debug("Find reached end of document without another match")
             QMessageBox.information(self, "Find", "No more matches found.")
 
     def replace_one(self):
@@ -116,6 +122,7 @@ class FindReplaceDialog(ThemedBaseDialog):
         find_text = self.find_input.text()
         replace_text = self.replace_input.text()
         if not find_text:
+            logger.debug("Replace-all requested with an empty search term")
             return
         content = self.editor.text()
         if self.case_checkbox.isChecked():
@@ -125,3 +132,10 @@ class FindReplaceDialog(ThemedBaseDialog):
                 re.escape(find_text), replace_text, content, flags=re.IGNORECASE
             )
         self.editor.setText(new_content)
+        if self.case_checkbox.isChecked():
+            replacement_count = content.count(find_text)
+        else:
+            replacement_count = len(
+                re.findall(re.escape(find_text), content, flags=re.IGNORECASE)
+            )
+        logger.info("Replace-all completed: replacements=%d", replacement_count)

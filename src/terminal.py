@@ -1,4 +1,5 @@
 import functools
+import logging
 import os
 import queue
 import sys
@@ -22,6 +23,8 @@ from PyQt5.QtWidgets import (
 from pyte.screens import Char, History
 
 from .theme_manager import theme
+
+logger = logging.getLogger(__name__)
 
 if sys.platform == "win32":
     try:
@@ -214,6 +217,12 @@ class Backend(QtCore.QThread):
 
     def __init__(self, cmd, cols, rows):
         super().__init__()
+        logger.info(
+            "Initializing terminal backend: platform=%s, columns=%d, rows=%d",
+            sys.platform,
+            cols,
+            rows,
+        )
         self.cmd = cmd
         self.cols = cols
         self.rows = rows
@@ -241,6 +250,7 @@ class Backend(QtCore.QThread):
 
     def _init_windows(self):
         if PTY is None:
+            logger.error("Windows pseudo-terminal dependency is unavailable")
             return
         self.pty_win = PTY(self.cols, self.rows)
         cmd = self.cmd or "powershell.exe"
@@ -254,7 +264,9 @@ class Backend(QtCore.QThread):
                 cmd = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
         try:
             self.pty_win.spawn(cmd)
+            logger.info("Windows terminal process started")
         except Exception as e:
+            logger.exception("Could not start Windows terminal process")
             err_msg = f"\r\n[!] Failed to spawn terminal: {cmd}\r\n[!] Error: {e}\r\n"
             QtCore.QTimer.singleShot(
                 100, lambda: self.stream.feed(err_msg.encode("utf-8"))
@@ -285,7 +297,9 @@ class Backend(QtCore.QThread):
                 stderr=slave_fd,
                 env=env,
             )
+            logger.info("Terminal process started")
         except Exception as e:
+            logger.exception("Could not start terminal process")
             err_msg = f"\r\n[!] Failed to spawn terminal: {cmd}\r\n[!] Error: {e}\r\n"
             QtCore.QTimer.singleShot(
                 100, lambda: self.stream.feed(err_msg.encode("utf-8"))
@@ -921,6 +935,11 @@ class _TerminalWidget(QTextEdit):
             self.backend.stop()
 
     def start(self, deactivate_ctrl_d: bool = False):
+        logger.info(
+            "Starting integrated terminal: columns=%d, rows=%d",
+            self.cols,
+            self.rows,
+        )
         self._deactivate_ctrl_d = deactivate_ctrl_d
         self.update_term_size()
         self.last_scroll_value = -1
@@ -933,6 +952,7 @@ class _TerminalWidget(QTextEdit):
 
     @SafeSlot()
     def process_exited(self):
+        logger.info("Integrated terminal process exited")
         self.backend = None
         current_text = self.toPlainText()
         self.setPlainText(current_text + f"\n\n[Process exited: {self._cmd}]")

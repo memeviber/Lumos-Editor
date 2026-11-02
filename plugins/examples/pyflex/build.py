@@ -1,13 +1,21 @@
+import logging
 import os
 import shutil
 import zipfile
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+)
 
 current_dir = Path.cwd()
 archive_name = current_dir.name + ".lmp"
 archive_path = current_dir / archive_name
 
 with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as zf:
+    logger.info("Building plugin archive: %s", archive_name)
     for root, _, files in os.walk(current_dir):
         for file in files:
             file_path = Path(root) / file
@@ -23,3 +31,4 @@ destination_dir.mkdir(parents=True, exist_ok=True)
 destination_path = destination_dir / archive_name
 shutil.copy2(archive_path, destination_path)
 archive_path.unlink()
+logger.info("Plugin archive copied to %s", destination_path)

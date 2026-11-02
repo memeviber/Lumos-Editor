@@ -1,5 +1,6 @@
 # https://github.com/memeviber/Zerionyx/
 
+import logging
 import os
 import re
 
@@ -14,6 +15,8 @@ from pygments.token import (
     String,
     Text,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class PyG_ZerionyxLexer(RegexLexer):
@@ -140,6 +143,7 @@ LIBRARY_CONSTANTS = {
 
 class ZerionyxLexer(lumos.PygmentsBaseLexer):  # type: ignore
     def __init__(self, editor, theme_name="default"):
+        logger.debug("Initializing Zerionyx lexer: theme=%s", theme_name)
         super().__init__("Zerionyx", editor, theme_name=theme_name)
         self.pygments_lexer = PyG_ZerionyxLexer()
 
@@ -289,7 +293,7 @@ class ZerionyxLexer(lumos.PygmentsBaseLexer):  # type: ignore
                             local_text = f.read()
                         parse_source(local_text)
                     except Exception:
-                        pass
+                        logger.exception("Could not read Zerionyx dependency file")
 
         match = re.search(
             r"([a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*)*)\.([a-zA-Z_]\w*)?$", line_text

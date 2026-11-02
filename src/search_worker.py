@@ -1,6 +1,9 @@
+import logging
 import os
 
 from PyQt5.QtCore import QThread, pyqtSignal
+
+logger = logging.getLogger(__name__)
 
 
 class SearchWorker(QThread):
@@ -15,6 +18,11 @@ class SearchWorker(QThread):
         self.is_running = True
 
     def run(self):
+        logger.info(
+            "Workspace search started: directory=%s, match_case=%s",
+            self.directory,
+            self.match_case,
+        )
         term_cmp = self.term if self.match_case else self.term.lower()
         ignore_dirs = {
             ".git",
@@ -42,6 +50,7 @@ class SearchWorker(QThread):
             ".tar",
             ".gz",
         }
+        files_with_matches = 0
         for root, dirs, files in os.walk(self.directory):
             if not self.is_running:
                 break
@@ -63,9 +72,16 @@ class SearchWorker(QThread):
                             file_matches.append((line_idx, line.strip()))
                     if file_matches:
                         self.file_matches_found.emit(filepath, file_matches)
-                except Exception:
-                    pass
+                        files_with_matches += 1
+                except Exception as error:
+                    logger.debug("Skipping unreadable file %s: %s", filepath, error)
+        logger.info(
+            "Workspace search completed: files_with_matches=%d, cancelled=%s",
+            files_with_matches,
+            not self.is_running,
+        )
         self.finished.emit()
 
     def stop(self):
+        logger.info("Workspace search cancellation requested")
         self.is_running = False

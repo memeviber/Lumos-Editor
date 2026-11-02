@@ -1,8 +1,12 @@
+import logging
+
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QDialogButtonBox, QHBoxLayout, QLabel, QStyle, QVBoxLayout
 
 from .theme_manager import theme
 from .themed_dialog import ThemedBaseDialog, ThemedDialogTitleBar
+
+logger = logging.getLogger(__name__)
 
 
 class QMessageBox(ThemedBaseDialog):
@@ -152,6 +156,7 @@ class QMessageBox(ThemedBaseDialog):
 
     @classmethod
     def _show_message(cls, parent, title, text, icon, buttons=None, defaultButton=None):
+        logger.debug("Displaying message dialog: title=%s, icon=%s", title, icon)
         box = cls(parent)
         box.setIcon(icon)
         box.setWindowTitle(title)
