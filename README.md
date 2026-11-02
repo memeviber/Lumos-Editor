@@ -30,7 +30,11 @@ Lumos is a modern, extensible code editor built with PyQt5, featuring syntax hig
 
 <img src="./imgs/screenshot1.png">
 <img src="./imgs/screenshot2.png">
- 
+
+## Supported Platforms
+
+Lumos currently supports **Windows and Linux**. macOS has not been tested or optimized and is not currently supported; it may not work as expected.
+
 ## Features
 
 -   **Clean, Modern UI:** A sleek dark theme designed for focus and comfort.
