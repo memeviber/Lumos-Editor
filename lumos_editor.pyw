@@ -16,7 +16,16 @@ from PyQt5.QtCore import (
     QTimer,
     pyqtSignal,
 )
-from PyQt5.QtGui import QColor, QFont, QIcon, QKeySequence, QPainter, QPen, QPixmap
+from PyQt5.QtGui import (
+    QColor,
+    QFont,
+    QIcon,
+    QKeySequence,
+    QPainter,
+    QPalette,
+    QPen,
+    QPixmap,
+)
 from PyQt5.QtWidgets import (
     QAbstractItemView,
     QAbstractItemDelegate,
@@ -45,6 +54,7 @@ from PyQt5.QtWidgets import (
     QTabBar,
     QTabWidget,
     QToolButton,
+    QToolTip,
     QTreeView,
     QTreeWidget,
     QTreeWidgetItem,
@@ -883,12 +893,6 @@ class MainWindow(QWidget):
             QWidget#MainWindow {{
                 background-color: transparent;
                 color: {theme.color27};
-            }}
-            QToolTip {{
-                background-color: {theme.color2};
-                color: {theme.color27};
-                border-radius: 4px;
-                padding: 4px;
             }}
             QMenuBar {{
                 background-color: {theme.color2};
@@ -3428,6 +3432,10 @@ def main():
             theme.reload_theme()
         except Exception:
             logger.exception("Could not load theme at startup")
+        tooltip_palette = app.palette()
+        tooltip_palette.setColor(QPalette.ToolTipBase, QColor(theme.color2))
+        tooltip_palette.setColor(QPalette.ToolTipText, QColor(theme.color27))
+        QToolTip.setPalette(tooltip_palette)
         splash = StartupSplash()
         splash.show()
         app.processEvents()
