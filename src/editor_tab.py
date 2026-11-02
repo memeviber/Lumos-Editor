@@ -37,6 +37,7 @@ from src.lexer import (
 )
 
 from . import md_renderer
+from .recovery import delete_recovery, new_recovery_id
 from .theme_manager import theme
 
 logger = logging.getLogger(__name__)
@@ -646,6 +647,9 @@ class EditorTab(QWidget):
         self.editor.customContextMenuRequested.connect(self.show_editor_context_menu)
         self.minimap = MiniMap(self.editor)
         self.filepath = filepath
+        self.recovery_id = new_recovery_id()
+        self.recovery_source_path = filepath
+        self.recovery_error_shown = False
         self.is_modified = False
         self.main_window = main_window
         self.wrap_mode = wrap_mode
@@ -1086,10 +1090,11 @@ class EditorTab(QWidget):
     def handle_text_changed(self):
         if not self.is_modified:
             self.is_modified = True
-            current_index = self.main_window.tabs.currentIndex()
-            current_text = self.main_window.tabs.tabText(current_index)
-            if not current_text.startswith("*"):
-                self.main_window.tabs.setTabText(current_index, "*" + current_text)
+            tab_index = self.main_window.tabs.indexOf(self)
+            if tab_index >= 0:
+                current_text = self.main_window.tabs.tabText(tab_index)
+                if not current_text.startswith("*"):
+                    self.main_window.tabs.setTabText(tab_index, "*" + current_text)
 
     def on_text_changed(self):
         if not self.is_modified:
@@ -1102,10 +1107,15 @@ class EditorTab(QWidget):
     def save(self):
         logger.debug("Editor tab marked saved: has_filepath=%s", bool(self.filepath))
         self.is_modified = False
-        current_index = self.main_window.tabs.currentIndex()
-        current_text = self.main_window.tabs.tabText(current_index)
-        if current_text.startswith("*") and self.filepath:
-            self.main_window.tabs.setTabText(current_index, current_text[1:])
+        delete_recovery(self.recovery_id)
+        if self.filepath:
+            self.recovery_source_path = self.filepath
+        self.recovery_error_shown = False
+        tab_index = self.main_window.tabs.indexOf(self)
+        if tab_index >= 0:
+            current_text = self.main_window.tabs.tabText(tab_index)
+            if current_text.startswith("*"):
+                self.main_window.tabs.setTabText(tab_index, current_text[1:])
 
     def eventFilter(self, obj, event):
         if obj is self.editor and event.type() == QEvent.KeyPress:

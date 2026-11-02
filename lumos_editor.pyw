@@ -73,6 +73,7 @@ from src import (
 )
 from src.theme_manager import theme
 from src.message_box import QMessageBox
+from src.recovery import delete_recovery, list_recoveries, write_recovery
 from src.themed_dialog import (
     ThemedFileDialog as QFileDialog,
     ThemedInputDialog as QInputDialog,
@@ -820,6 +821,10 @@ class MainWindow(QWidget):
         self.check_timer.start(5000)
         self.find_replace_dialog = None
         self.cache = {}
+        self.recovery_timer = QTimer(self)
+        self.recovery_timer.setInterval(5000)
+        self.recovery_timer.timeout.connect(self._autosave_recovery)
+        self.recovery_timer.start()
         QTimer.singleShot(0, self.update_overlay_geometry)
         self.cmd_palette_shortcut = QShortcut(QKeySequence("Ctrl+Shift+P"), self)
         self.cmd_palette_shortcut.activated.connect(self.show_command_palette)
@@ -987,6 +992,109 @@ class MainWindow(QWidget):
             self.right_icon,
             QsciScintilla.SC_MARKNUM_FOLDER,
         )
+
+    def _editor_tabs(self):
+        for index in range(self.tabs.count()):
+            tab = self.tabs.widget(index)
+            if isinstance(tab, SplitTab):
+                yield from tab.get_child_editors()
+            elif isinstance(tab, EditorTab):
+                yield tab
+
+    def _write_recovery_backup(self, tab):
+        try:
+            write_recovery(
+                tab.recovery_id,
+                tab.filepath or tab.recovery_source_path,
+                tab.editor.text(),
+            )
+            tab.recovery_error_shown = False
+            logger.debug(
+                "Unsaved editor content backed up: characters=%d",
+                len(tab.editor.text()),
+            )
+            return True
+        except (OSError, ValueError):
+            logger.exception("Could not back up unsaved editor content")
+            if not tab.recovery_error_shown:
+                QMessageBox.warning(
+                    self,
+                    "Recovery Backup Failed",
+                    "Lumos could not back up this unsaved file. Your original file has not been changed.",
+                )
+                tab.recovery_error_shown = True
+            return False
+
+    def _autosave_recovery(self):
+        for tab in self._editor_tabs():
+            if tab.is_modified:
+                self._write_recovery_backup(tab)
+
+    def _offer_recovery(self):
+        recoveries = list_recoveries()
+        if not recoveries:
+            return
+
+        filenames = [
+            os.path.basename(recovery["filepath"])
+            if recovery.get("filepath")
+            else "Untitled file"
+            for recovery in recoveries[:8]
+        ]
+        if len(recoveries) > len(filenames):
+            filenames.append(f"...and {len(recoveries) - len(filenames)} more")
+        answer = QMessageBox.question(
+            self,
+            "Recover Unsaved Files",
+            "Lumos found unsaved work from an earlier session:\n\n"
+            + ", ".join(f"{filename}" for filename in filenames)
+            + "\n\nYes: restore all files\nNo: permanently discard these backups\nCancel: decide later",
+            QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel,
+            QMessageBox.Yes,
+        )
+
+        if answer == QMessageBox.Yes:
+            for recovery in recoveries:
+                try:
+                    self._restore_recovery(recovery)
+                except Exception:
+                    logger.exception("Could not restore a recovery backup")
+                    QMessageBox.warning(
+                        self,
+                        "Recovery Failed",
+                        "One of the recovery backups could not be opened. Its backup has been kept.",
+                    )
+        elif answer == QMessageBox.No:
+            for recovery in recoveries:
+                delete_recovery(recovery["id"])
+            logger.info("User discarded crash recovery backups: count=%d", len(recoveries))
+        else:
+            logger.info("User postponed crash recovery: count=%d", len(recoveries))
+
+    def _restore_recovery(self, recovery):
+        source_path = recovery.get("filepath")
+        filepath = source_path if source_path and os.path.isfile(source_path) else None
+        tab = EditorTab(
+            plugin_manager=self.plugin_manager,
+            filepath=filepath,
+            main_window=self,
+            wrap_mode=self.wrap_mode,
+        )
+        tab.recovery_id = recovery["id"]
+        tab.recovery_source_path = source_path
+        recovered_name = os.path.basename(source_path) if source_path else "Untitled"
+        tab.tabname = f"Recovered - {recovered_name}"
+
+        self._setup_editor_markers(tab)
+        index = self.tabs.addTab(tab, tab.tabname)
+        self.tabs.setCurrentIndex(index)
+        tab.editor.setText(recovery["content"])
+        tab.is_modified = True
+        current_title = self.tabs.tabText(index)
+        if not current_title.startswith("*"):
+            self.tabs.setTabText(index, "*" + current_title)
+        self.show_status_message(f"Recovered unsaved work: {tab.tabname}")
+        logger.info("Crash recovery restored: has_original_file=%s", bool(filepath))
 
     def save_session(self):
         sizes = self.splitter.sizes()
@@ -1722,6 +1830,7 @@ class MainWindow(QWidget):
             path,
             len(content_to_save),
         )
+        self._write_recovery_backup(target_tab)
         try:
             if os.path.exists(path):
                 with open(path, "r", encoding="utf-8") as f:
@@ -1749,6 +1858,9 @@ class MainWindow(QWidget):
             with open(path, "w", encoding="utf-8") as f:
                 f.write(content_to_save)
             self.cache[path] = content_to_save
+            delete_recovery(target_tab.recovery_id)
+            target_tab.recovery_source_path = path
+            target_tab.recovery_error_shown = False
             if is_checking_content_equal:
                 self.close_file_tab(path)
                 return True
@@ -1842,6 +1954,9 @@ class MainWindow(QWidget):
                     )
                 except Exception:
                     pass
+        for tab in tabs_to_check:
+            if isinstance(tab, EditorTab):
+                delete_recovery(tab.recovery_id)
         tab_to_close.deleteLater()
         self.tabs.removeTab(index)
         filepaths_to_remove = set()
@@ -2951,6 +3066,7 @@ def main():
         def finish_splash_when_ready():
             if window.isVisible():
                 splash.finish(window)
+                QTimer.singleShot(0, window._offer_recovery)
             else:
                 QTimer.singleShot(50, finish_splash_when_ready)
 

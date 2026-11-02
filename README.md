@@ -483,6 +483,7 @@ The following shortcuts are documented for Lumos Editor.
 - Run `python -m pip install -r requirements.txt` again if necessary.
 - Check the terminal output for missing modules or Qt-related errors.
 - Review `~/.lumos_editor/startup.log` for detailed startup and runtime logs (on Windows: `%USERPROFILE%\.lumos_editor\startup.log`). The log rotates at 5 MB and keeps up to three backups.
+- Modified editor tabs are backed up every 5 seconds in `~/.lumos_editor/recovery`. On the next launch, choose **Yes** to restore backups, **No** to discard them, or **Cancel** to decide later. Restored content opens in a separate unsaved tab and does not overwrite the original file.
 
 Logs include timestamps, severity, module, and thread information. Logging calls avoid recording document text or AI prompts.
 
