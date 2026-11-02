@@ -6,7 +6,9 @@ logger = logging.getLogger(__name__)
 class LumosAPI:
     def __init__(self, wrapped_obj):
         super().__setattr__("_wrapped_obj", wrapped_obj)
-        logger.debug("Initialized plugin API wrapper for %s", type(wrapped_obj).__name__)
+        logger.debug(
+            "Initialized plugin API wrapper for %s", type(wrapped_obj).__name__
+        )
 
     def __getattr__(self, name):
         if isinstance(self._wrapped_obj, dict):

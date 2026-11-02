@@ -26,7 +26,9 @@ class ImageViewer(QWidget):
         super().__init__()
         self.is_modified = None
         self.filepath = os.path.abspath(filepath)
-        logger.info("Opening media viewer: type=%s", os.path.splitext(filepath)[1].lower())
+        logger.info(
+            "Opening media viewer: type=%s", os.path.splitext(filepath)[1].lower()
+        )
         self.editor = None
         self.tabname = (
             os.path.splitext(os.path.basename(filepath))[0][:27] + "..."

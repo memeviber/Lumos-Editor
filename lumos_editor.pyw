@@ -320,52 +320,82 @@ class TitleBar(QWidget):
         self.menu_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         layout.addWidget(self.menu_container, 1)
         btn_size = QSize(34, 28)
+        nav_btn_style = f"""
+            QToolButton {{
+                background: transparent;
+                color: {theme.color26};
+                border: none;
+                border-radius: 4px;
+            }}
+            QToolButton:hover {{
+                background: rgba(255, 255, 255, 0.08);
+                color: {theme.color31};
+            }}
+            QToolButton:pressed {{
+                background: rgba(255, 255, 255, 0.15);
+            }}
+        """
+        close_btn_style = f"""
+            QToolButton {{
+                background: transparent;
+                color: {theme.color26};
+                border: none;
+                border-radius: 4px;
+            }}
+            QToolButton:hover {{
+                background: #e81123;
+                color: #ffffff;
+            }}
+            QToolButton:pressed {{
+                background: #bf0f1d;
+                color: #ffffff;
+            }}
+        """
+
         self.min_btn = QToolButton()
         self.min_btn.setIcon(QIcon("resources:/minimize-window-icon.png"))
         self.min_btn.setIconSize(QSize(16, 16))
         self.min_btn.setToolTip("Minimize")
         self.min_btn.setFixedSize(btn_size)
-        self.min_btn.setObjectName("WindowButton")
+        self.min_btn.setStyleSheet(nav_btn_style)
+
         self.max_btn = QToolButton()
-        self.max_btn.setIcon(QIcon("resources:/restore-window-icon.png"))
+        max_icon = QIcon("resources:/restore-window-icon.png")
+        if max_icon.isNull():
+            max_icon = QIcon("resources:/restore-window-icon.png")
+        self.max_btn.setIcon(max_icon)
         self.max_btn.setIconSize(QSize(16, 16))
         self.max_btn.setToolTip("Maximize")
         self.max_btn.setFixedSize(btn_size)
-        self.max_btn.setObjectName("WindowButton")
+        self.max_btn.setStyleSheet(nav_btn_style)
+
         self.close_btn = QToolButton()
         self.close_btn.setIcon(QIcon("resources:/close-window-icon.png"))
         self.close_btn.setIconSize(QSize(16, 16))
         self.close_btn.setToolTip("Close")
         self.close_btn.setFixedSize(btn_size)
-        self.close_btn.setObjectName("WindowButton")
+        self.close_btn.setStyleSheet(close_btn_style)
+
         for b in (self.min_btn, self.max_btn, self.close_btn):
             b.setFocusPolicy(Qt.NoFocus)
+
         layout.addWidget(self.min_btn, 0, Qt.AlignVCenter)
         layout.addWidget(self.max_btn, 0, Qt.AlignVCenter)
         layout.addWidget(self.close_btn, 0, Qt.AlignVCenter)
+
         self.min_btn.clicked.connect(self.on_min)
         self.max_btn.clicked.connect(self.on_max)
         self.close_btn.clicked.connect(self.on_close)
         self.setCursor(Qt.ArrowCursor)
         self.setStyleSheet(
             f"""
-        QToolButton#WindowButton {{
-            background: {theme.color2};
-            color: {theme.color26};
-            border: none;
-            border-radius: 4px;
-        }}
-        QToolButton#WindowButton:hover {{
-            background: rgba(255,255,255,0.04);
-            color: {theme.color31};
-        }}
-        QWidget#TitleBar {{ 
-            background: {theme.color2}; 
-            border-top-left-radius: {RADIUS}px; 
-            border-top-right-radius: {RADIUS}px; 
-            border-bottom-left-radius: 0px; 
-            border-bottom-right-radius: 0px;
-        }}"""
+            QWidget#TitleBar {{ 
+                background: {theme.color2}; 
+                border-top-left-radius: {RADIUS}px; 
+                border-top-right-radius: {RADIUS}px; 
+                border-bottom-left-radius: 0px; 
+                border-bottom-right-radius: 0px;
+            }}"""
         )
         self.installEventFilter(self)
 
@@ -439,10 +469,16 @@ class TitleBar(QWidget):
         if self.parent.isMaximized():
             self.parent.showNormal()
             self.max_btn.setToolTip("Maximize")
+            max_icon = QIcon("resources:/restore-window-icon.png")
+            if not max_icon.isNull():
+                self.max_btn.setIcon(max_icon)
         else:
             self.parent.restore_snap_constraints()
             self.parent.showMaximized()
             self.max_btn.setToolTip("Restore")
+            restore_icon = QIcon("resources:/restore-window-icon.png")
+            if not restore_icon.isNull():
+                self.max_btn.setIcon(restore_icon)
 
     def on_close(self):
         if self.parent:
@@ -1451,14 +1487,43 @@ class MainWindow(QWidget):
             handle.setVisible(visible)
 
     def update_overlay_geometry(self):
-        if self._interactive_resize:
-            return
-        is_full_area = self.isMaximized() or self._snap_side is not None
-        if is_full_area:
+        is_max = self.isMaximized()
+        if hasattr(self, "titlebar") and hasattr(self.titlebar, "max_btn"):
+            if is_max:
+                self.titlebar.max_btn.setToolTip("Restore")
+                restore_icon = QIcon("resources:/restore-window-icon.png")
+                if not restore_icon.isNull():
+                    self.titlebar.max_btn.setIcon(restore_icon)
+            else:
+                self.titlebar.max_btn.setToolTip("Maximize")
+                max_icon = QIcon("resources:/restore-window-icon.png")
+                if not max_icon.isNull():
+                    self.titlebar.max_btn.setIcon(max_icon)
+
+        if is_max:
             self.main_layout.setContentsMargins(0, 0, 0, 0)
             self.container.setStyleSheet(
                 f"QWidget#container {{ background:{self.bg_inner}; border-radius: 0px; }}"
             )
+            self.titlebar.setStyleSheet(
+                f"QWidget#TitleBar {{ background: {theme.color2}; border-radius: 0px; }}"
+            )
+            self.status_bar.setStyleSheet(f"""
+                QStatusBar {{
+                    background: {theme.color2};
+                    color: {theme.color23};
+                    font-size: 18px;
+                    border-top: 1px solid {theme.color1};
+                    padding: 2px 4px;
+                    border-radius: 0px;
+                }}
+                QStatusBar QLabel {{
+                    color: {theme.color23};
+                    font-size: 16px; 
+                    text-align: right;
+                    padding-left: 4px;
+                }}
+            """)
             self.border_overlay.hide()
             self.shadow_effect.setEnabled(False)
         else:
@@ -1468,10 +1533,36 @@ class MainWindow(QWidget):
             self.container.setStyleSheet(
                 f"QWidget#container {{ background:{self.bg_inner}; border-radius: {RADIUS}px; }}"
             )
+            self.titlebar.setStyleSheet(f"""
+                QWidget#TitleBar {{ 
+                    background: {theme.color2}; 
+                    border-top-left-radius: {RADIUS}px; 
+                    border-top-right-radius: {RADIUS}px; 
+                    border-bottom-left-radius: 0px; 
+                    border-bottom-right-radius: 0px;
+                }}""")
+            self.status_bar.setStyleSheet(f"""
+                QStatusBar {{
+                    background: {theme.color2};
+                    color: {theme.color23};
+                    font-size: 18px;
+                    border-top: 1px solid {theme.color1};
+                    padding: 2px 4px;
+                    border-bottom-left-radius: {RADIUS}px;
+                    border-bottom-right-radius: {RADIUS}px;
+                }}
+                QStatusBar QLabel {{
+                    color: {theme.color23};
+                    font-size: 16px; 
+                    text-align: right;
+                    padding-left: 4px;
+                }}
+            """)
             self.border_overlay.show()
             self.shadow_effect.setEnabled(True)
             QTimer.singleShot(0, self._sync_border_geometry)
-        self.size_grip.setVisible(not self.isMaximized())
+
+        self.size_grip.setVisible(not is_max)
 
     def _sync_border_geometry(self):
         if not self.isMaximized() and self._snap_side is None:
