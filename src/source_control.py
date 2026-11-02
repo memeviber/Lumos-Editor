@@ -20,8 +20,8 @@ from PyQt5.QtWidgets import (
 )
 
 from .message_box import QMessageBox
-from .themed_dialog import ThemedInputDialog as QInputDialog
 from .theme_manager import theme
+from .themed_dialog import ThemedInputDialog as QInputDialog
 
 
 class GitPoller(QThread):

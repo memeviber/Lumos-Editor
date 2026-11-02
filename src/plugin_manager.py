@@ -8,14 +8,12 @@ from PyQt5.QtGui import QIcon, QKeySequence, QPixmap
 from PyQt5.QtWidgets import (
     QAction,
     QApplication,
-    QDialog,
     QDialogButtonBox,
     QHBoxLayout,
     QLabel,
     QListWidget,
     QListWidgetItem,
     QMenu,
-    QVBoxLayout,
     QWidget,
 )
 
@@ -24,9 +22,9 @@ from .editor_tab import EditorTab
 from .lexer import BaseLexer, PygmentsBaseLexer
 from .message_box import QMessageBox
 from .split_tab import SplitTab
-from .themed_dialog import ThemedDialogTitleBar
-from .themed_dialog import ThemedInputDialog as QInputDialog
 from .theme_manager import theme
+from .themed_dialog import ThemedBaseDialog, ThemedDialogTitleBar
+from .themed_dialog import ThemedInputDialog as QInputDialog
 
 
 class PluginInfo:
@@ -686,26 +684,20 @@ class PluginManager:
         return self._load_icon_from_plugin(plugin_info)
 
 
-class PluginDialog(QDialog):
+class PluginDialog(ThemedBaseDialog):
     def __init__(self, plugin_manager, config_manager, parent=None):
-        super().__init__(parent, Qt.Dialog | Qt.FramelessWindowHint)
+        super().__init__(
+            parent,
+            Qt.Dialog | Qt.FramelessWindowHint,
+            "PluginDialogContainer",
+        )
         self.plugin_manager = plugin_manager
         self.config_manager = config_manager
         self.setWindowTitle("Manage Plugins")
-        self.setObjectName("PluginDialog")
         self.setMinimumSize(500, 360)
-        self.setStyleSheet(
-            f"""
-            QDialog#PluginDialog {{
-                background-color: {theme.color2};
-                color: {theme.color27};
-                border: 1px solid {theme.color13};
-                border-radius: 8px;
-            }}
-            QLabel {{
-                color: {theme.color27};
-                background: transparent;
-            }}
+        self.container.setStyleSheet(
+            self.container.styleSheet()
+            + f"""
             QListWidget {{
                 background-color: {theme.color1};
                 color: {theme.color27};
@@ -722,34 +714,10 @@ class PluginDialog(QDialog):
                 background-color: {theme.color9};
                 color: {theme.color31};
             }}
-            QPushButton {{
-                background-color: {theme.color7};
-                color: {theme.color27};
-                border: 1px solid {theme.color13};
-                border-radius: 4px;
-                min-width: 76px;
-                padding: 6px 12px;
-            }}
-            QPushButton:hover {{
-                background-color: {theme.color9};
-            }}
-            QPushButton:pressed {{
-                background-color: {theme.color11};
-            }}
-            QPushButton:default {{
-                background-color: {theme.color35};
-                color: {theme.color31};
-                border-color: {theme.color35};
-            }}
-            QPushButton:default:hover {{
-                background-color: {theme.color37};
-            }}
             """
         )
-        self.layout = QVBoxLayout(self)
-        self.layout.setContentsMargins(1, 1, 1, 1)
-        self.layout.setSpacing(0)
-        self.title_bar = ThemedDialogTitleBar(self, "Manage Plugins")
+        self.layout = self.content_layout
+        self.title_bar = ThemedDialogTitleBar(self.container, "Manage Plugins")
         self.title_bar.closeRequested.connect(self.reject)
         self.layout.addWidget(self.title_bar)
         self.info_label = QLabel(
@@ -774,7 +742,7 @@ class PluginDialog(QDialog):
         button_layout.addWidget(self.button_box)
         self.layout.addLayout(button_layout)
         self.plugin_list_widget.setStyleSheet(
-            f"""
+            """
             QListWidget {{
                 margin: 8px 16px 0px;
             }}

@@ -18,6 +18,8 @@ from PyQt5.QtWidgets import (
 
 from .theme_manager import theme
 
+DIALOG_RADIUS = 8
+
 
 def themed_input_stylesheet(
     selector,
@@ -30,9 +32,7 @@ def themed_input_stylesheet(
     background_color = background_color or theme.color1
     border = border or f"1px solid {theme.color13}"
     focus_border = focus_border or f"1px solid {theme.color35}"
-    focus_selectors = ", ".join(
-        f"{item.strip()}:focus" for item in selector.split(",")
-    )
+    focus_selectors = ", ".join(f"{item.strip()}:focus" for item in selector.split(","))
     return f"""
         {selector} {{
             background-color: {background_color};
@@ -55,13 +55,13 @@ def set_input_placeholder_color(widget):
     widget.setPalette(palette)
 
 
-def themed_dialog_stylesheet(dialog_selector):
+def themed_dialog_stylesheet(container_selector):
     return f"""
-        {dialog_selector} {{
+        {container_selector} {{
             background-color: {theme.color2};
             color: {theme.color27};
             border: 1px solid {theme.color13};
-            border-radius: 8px;
+            border-radius: {DIALOG_RADIUS}px;
         }}
         QLabel {{
             color: {theme.color27};
@@ -162,6 +162,47 @@ def themed_dialog_stylesheet(dialog_selector):
     """
 
 
+class ThemedBaseDialog(QDialog):
+    def __init__(
+        self,
+        parent=None,
+        window_flags=None,
+        object_name="ThemedDialogContainer",
+    ):
+        if window_flags is None:
+            super().__init__(parent)
+        else:
+            super().__init__(parent, window_flags)
+
+        self.setAttribute(Qt.WA_TranslucentBackground, True)
+        self.setAttribute(Qt.WA_NoSystemBackground, True)
+        self.setStyleSheet(f"QDialog#{object_name}Root {{ background: transparent; }}")
+        self.setObjectName(f"{object_name}Root")
+
+        outer_layout = QVBoxLayout(self)
+        outer_layout.setContentsMargins(1, 1, 1, 1)
+        outer_layout.setSpacing(0)
+
+        self.container = QWidget(self)
+        self.container.setObjectName(object_name)
+        self.container.setStyleSheet(themed_dialog_stylesheet(f"QWidget#{object_name}"))
+        outer_layout.addWidget(self.container)
+
+        self.content_layout = QVBoxLayout(self.container)
+        self.content_layout.setContentsMargins(0, 0, 0, 0)
+        self.content_layout.setSpacing(0)
+
+    def setWindowTitle(self, title):
+        super().setWindowTitle(title)
+        if hasattr(self, "title_bar"):
+            self.title_bar.setTitle(title)
+
+    def setWindowIcon(self, icon):
+        super().setWindowIcon(icon)
+        if hasattr(self, "title_bar"):
+            self.title_bar.setWindowIcon(icon)
+
+
 class ThemedDialogTitleBar(QWidget):
     closeRequested = pyqtSignal()
 
@@ -174,12 +215,11 @@ class ThemedDialogTitleBar(QWidget):
         self.setStyleSheet(
             f"""
             QWidget#ThemedDialogTitleBar {{
-                background: {theme.color2};
-                border-top-left-radius: 7px;
-                border-top-right-radius: 7px;
+                background: transparent;
+                border-bottom: 1px solid {theme.color1};
             }}
             QToolButton#ThemedDialogCloseButton {{
-                background: {theme.color2};
+                background: transparent;
                 border: none;
                 border-radius: 4px;
             }}
@@ -204,7 +244,7 @@ class ThemedDialogTitleBar(QWidget):
         self.title_label = QLabel(title, self)
         self.title_label.setFont(QFont("Segoe UI", 10))
         self.title_label.setStyleSheet(
-            f"color: {theme.color30}; background: {theme.color2};"
+            f"color: {theme.color30}; background: transparent;"
         )
         self.title_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self.title_label.setAttribute(Qt.WA_TransparentForMouseEvents)
@@ -229,8 +269,13 @@ class ThemedDialogTitleBar(QWidget):
     def eventFilter(self, watched, event):
         if watched is self:
             window = self.window()
-            if event.type() == QEvent.MouseButtonPress and event.button() == Qt.LeftButton:
-                self._drag_position = event.globalPos() - window.frameGeometry().topLeft()
+            if (
+                event.type() == QEvent.MouseButtonPress
+                and event.button() == Qt.LeftButton
+            ):
+                self._drag_position = (
+                    event.globalPos() - window.frameGeometry().topLeft()
+                )
                 return True
             if event.type() == QEvent.MouseMove and self._drag_position is not None:
                 if event.buttons() & Qt.LeftButton:
@@ -242,27 +287,29 @@ class ThemedDialogTitleBar(QWidget):
         return super().eventFilter(watched, event)
 
 
-class ThemedInputDialog(QDialog):
+class ThemedInputDialog(ThemedBaseDialog):
     TextInput = 0
     IntInput = 1
     DoubleInput = 2
 
     def __init__(self, parent=None):
-        super().__init__(parent, Qt.Dialog | Qt.FramelessWindowHint)
-        self.setObjectName("ThemedInputDialog")
-        self.setStyleSheet(themed_dialog_stylesheet("QDialog#ThemedInputDialog"))
+        super().__init__(
+            parent,
+            Qt.Dialog | Qt.FramelessWindowHint,
+            "ThemedInputDialogContainer",
+        )
+
         self._input_mode = self.TextInput
-        self._label = QLabel(self)
+        self._label = QLabel(self.container)
         self._input_widget = None
 
-        self._layout = QVBoxLayout(self)
-        self._layout.setContentsMargins(1, 1, 1, 1)
-        self._layout.setSpacing(0)
-        self.title_bar = ThemedDialogTitleBar(self)
+        self._layout = self.content_layout
+
+        self.title_bar = ThemedDialogTitleBar(self.container)
         self.title_bar.closeRequested.connect(self.reject)
         self._layout.addWidget(self.title_bar)
 
-        content = QWidget(self)
+        content = QWidget(self.container)
         content_layout = QVBoxLayout(content)
         content_layout.setContentsMargins(16, 14, 16, 8)
         content_layout.setSpacing(10)
@@ -271,7 +318,7 @@ class ThemedInputDialog(QDialog):
         self._layout.addWidget(content)
 
         self.button_box = QDialogButtonBox(
-            QDialogButtonBox.Ok | QDialogButtonBox.Cancel, parent=self
+            QDialogButtonBox.Ok | QDialogButtonBox.Cancel, parent=self.container
         )
         self.button_box.accepted.connect(self.accept)
         self.button_box.rejected.connect(self.reject)
@@ -347,7 +394,10 @@ class ThemedInputDialog(QDialog):
         inputMethodHints=Qt.ImhNone,
     ):
         dialog = cls(parent)
-        dialog.setWindowFlags(dialog.windowFlags() | flags)
+        if flags != Qt.WindowFlags():
+            dialog.setWindowFlags(dialog.windowFlags() | flags)
+            dialog.setAttribute(Qt.WA_TranslucentBackground, True)
+            dialog.setAttribute(Qt.WA_NoSystemBackground, True)
         dialog.setWindowTitle(title)
         dialog.setLabelText(label)
         dialog._input_widget.setEchoMode(echo)
@@ -369,7 +419,10 @@ class ThemedInputDialog(QDialog):
         inputMethodHints=Qt.ImhNone,
     ):
         dialog = cls(parent)
-        dialog.setWindowFlags(dialog.windowFlags() | flags)
+        if flags != Qt.WindowFlags():
+            dialog.setWindowFlags(dialog.windowFlags() | flags)
+            dialog.setAttribute(Qt.WA_TranslucentBackground, True)
+            dialog.setAttribute(Qt.WA_NoSystemBackground, True)
         dialog.setWindowTitle(title)
         dialog.setLabelText(label)
         dialog._set_items(items, current, editable)
@@ -388,7 +441,10 @@ class ThemedInputDialog(QDialog):
         inputMethodHints=Qt.ImhNone,
     ):
         dialog = cls(parent)
-        dialog.setWindowFlags(dialog.windowFlags() | flags)
+        if flags != Qt.WindowFlags():
+            dialog.setWindowFlags(dialog.windowFlags() | flags)
+            dialog.setAttribute(Qt.WA_TranslucentBackground, True)
+            dialog.setAttribute(Qt.WA_NoSystemBackground, True)
         dialog.setWindowTitle(title)
         dialog.setLabelText(label)
         dialog._set_multiline(text)
@@ -397,7 +453,7 @@ class ThemedInputDialog(QDialog):
         return dialog._input_widget.toPlainText(), result == QDialog.Accepted
 
 
-class ThemedFileDialog(QDialog):
+class ThemedFileDialog(ThemedBaseDialog):
     DontUseNativeDialog = QFileDialog.DontUseNativeDialog
     ShowDirsOnly = QFileDialog.ShowDirsOnly
     DontResolveSymlinks = QFileDialog.DontResolveSymlinks
@@ -410,25 +466,38 @@ class ThemedFileDialog(QDialog):
         filter="",
         options=QFileDialog.Options(),
     ):
-        super().__init__(parent, Qt.Dialog | Qt.FramelessWindowHint)
-        self.setObjectName("ThemedFileDialog")
+        super().__init__(
+            parent,
+            Qt.Dialog | Qt.FramelessWindowHint,
+            "ThemedFileDialogContainer",
+        )
         self.setWindowTitle(caption)
-        self.setMinimumSize(720, 480)
-        self.setStyleSheet(themed_dialog_stylesheet("QDialog#ThemedFileDialog"))
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(1, 1, 1, 1)
-        layout.setSpacing(0)
-        self.title_bar = ThemedDialogTitleBar(self, caption)
-        self.title_bar.closeRequested.connect(self.reject)
-        layout.addWidget(self.title_bar)
+        self.setMinimumSize(740, 500)
 
-        self.file_dialog = QFileDialog(None, caption, directory, filter)
+        container_layout = self.content_layout
+
+        self.title_bar = ThemedDialogTitleBar(self.container, caption)
+        self.title_bar.closeRequested.connect(self.reject)
+        container_layout.addWidget(self.title_bar)
+
+        content_wrapper = QWidget(self.container)
+        content_wrapper.setStyleSheet("background: transparent;")
+        content_layout = QVBoxLayout(content_wrapper)
+        content_layout.setContentsMargins(8, 2, 8, 8)
+        content_layout.setSpacing(0)
+
+        self.file_dialog = QFileDialog(content_wrapper, caption, directory, filter)
         self.file_dialog.setOption(QFileDialog.DontUseNativeDialog, True)
         self.file_dialog.setOptions(options | QFileDialog.DontUseNativeDialog)
         self.file_dialog.setWindowFlags(Qt.Widget)
-        self.file_dialog.setStyleSheet(themed_dialog_stylesheet("QFileDialog"))
+        self.file_dialog.setStyleSheet(
+            "QFileDialog { background: transparent; border: none; }"
+        )
         self._apply_file_dialog_palette()
-        layout.addWidget(self.file_dialog, 1)
+
+        content_layout.addWidget(self.file_dialog)
+        container_layout.addWidget(content_wrapper, 1)
+
         self.file_dialog.accepted.connect(self.accept)
         self.file_dialog.rejected.connect(self.reject)
 
@@ -466,15 +535,16 @@ class ThemedFileDialog(QDialog):
 
         for header in self.file_dialog.findChildren(QHeaderView):
             header.setPalette(palette)
-            header.setStyleSheet(
-                "QHeaderView {"
-                f"color: {theme.color27};"
-                "}"
-            )
+            header.setStyleSheet(f"QHeaderView {{color: {theme.color27};}}")
 
     @classmethod
     def getOpenFileName(
-        cls, parent=None, caption="", directory="", filter="", options=QFileDialog.Options()
+        cls,
+        parent=None,
+        caption="",
+        directory="",
+        filter="",
+        options=QFileDialog.Options(),
     ):
         dialog = cls(parent, caption, directory, filter, options)
         if dialog.exec_() == QDialog.Accepted:
@@ -484,16 +554,29 @@ class ThemedFileDialog(QDialog):
 
     @classmethod
     def getOpenFileNames(
-        cls, parent=None, caption="", directory="", filter="", options=QFileDialog.Options()
+        cls,
+        parent=None,
+        caption="",
+        directory="",
+        filter="",
+        options=QFileDialog.Options(),
     ):
         dialog = cls(parent, caption, directory, filter, options)
         if dialog.exec_() == QDialog.Accepted:
-            return dialog.file_dialog.selectedFiles(), dialog.file_dialog.selectedNameFilter()
+            return (
+                dialog.file_dialog.selectedFiles(),
+                dialog.file_dialog.selectedNameFilter(),
+            )
         return [], dialog.file_dialog.selectedNameFilter()
 
     @classmethod
     def getSaveFileName(
-        cls, parent=None, caption="", directory="", filter="", options=QFileDialog.Options()
+        cls,
+        parent=None,
+        caption="",
+        directory="",
+        filter="",
+        options=QFileDialog.Options(),
     ):
         dialog = cls(parent, caption, directory, filter, options)
         dialog.file_dialog.setAcceptMode(QFileDialog.AcceptSave)

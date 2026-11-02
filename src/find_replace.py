@@ -4,42 +4,38 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QKeySequence
 from PyQt5.QtWidgets import (
     QCheckBox,
-    QDialog,
     QGridLayout,
     QLabel,
     QLineEdit,
     QPushButton,
     QShortcut,
-    QVBoxLayout,
     QWidget,
 )
 
 from .message_box import QMessageBox
 from .themed_dialog import (
+    ThemedBaseDialog,
     ThemedDialogTitleBar,
     set_input_placeholder_color,
-    themed_dialog_stylesheet,
     themed_input_stylesheet,
 )
 
 
-class FindReplaceDialog(QDialog):
+class FindReplaceDialog(ThemedBaseDialog):
     def __init__(self, parent=None, editor=None):
-        super().__init__(parent, Qt.Dialog | Qt.FramelessWindowHint)
-        self.setObjectName("FindReplaceDialog")
+        super().__init__(
+            parent,
+            Qt.Dialog | Qt.FramelessWindowHint,
+            "FindReplaceDialogContainer",
+        )
         self.setWindowTitle("Find & Replace")
         self.setModal(False)
         self.editor = editor
-        self.setStyleSheet(
-            themed_dialog_stylesheet("QDialog#FindReplaceDialog")
-        )
-        self.dialog_layout = QVBoxLayout(self)
-        self.dialog_layout.setContentsMargins(1, 1, 1, 1)
-        self.dialog_layout.setSpacing(0)
-        self.title_bar = ThemedDialogTitleBar(self, "Find & Replace")
+        self.dialog_layout = self.content_layout
+        self.title_bar = ThemedDialogTitleBar(self.container, "Find & Replace")
         self.title_bar.closeRequested.connect(self.close)
         self.dialog_layout.addWidget(self.title_bar)
-        content = QWidget(self)
+        content = QWidget(self.container)
         layout = QGridLayout(content)
         layout.setContentsMargins(16, 14, 16, 10)
         layout.setHorizontalSpacing(8)

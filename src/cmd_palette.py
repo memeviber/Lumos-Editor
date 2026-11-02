@@ -1,40 +1,31 @@
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
-    QDialog,
-    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QListWidget,
     QListWidgetItem,
-    QVBoxLayout,
     QWidget,
 )
 
 from .theme_manager import theme
-from .themed_dialog import set_input_placeholder_color, themed_input_stylesheet
+from .themed_dialog import (
+    ThemedBaseDialog,
+    set_input_placeholder_color,
+    themed_input_stylesheet,
+)
 
 
-class CommandPalette(QDialog):
+class CommandPalette(ThemedBaseDialog):
     def __init__(self, parent=None, commands=None):
-        super().__init__(parent)
-        self.setWindowFlags(
-            Qt.Popup | Qt.FramelessWindowHint | Qt.NoDropShadowWindowHint
+        super().__init__(
+            parent,
+            Qt.Popup | Qt.FramelessWindowHint | Qt.NoDropShadowWindowHint,
+            "CommandPaletteContainer",
         )
-        self.setAttribute(Qt.WA_TranslucentBackground)
         self.setFixedSize(600, 420)
         self.commands = commands or []
-        main_layout = QVBoxLayout(self)
-        self.container = QFrame(self)
-        self.container.setObjectName("CommandContainer")
-        self.container.setStyleSheet(f"""
-            QFrame#CommandContainer {{
-                background-color: {theme.color2};
-                border-radius: 8px;
-                border: 1px solid {theme.color13};
-            }}
-        """)
-        container_layout = QVBoxLayout(self.container)
+        container_layout = self.content_layout
         container_layout.setContentsMargins(0, 0, 0, 0)
         container_layout.setSpacing(0)
         self.search_input = QLineEdit()
@@ -70,7 +61,6 @@ class CommandPalette(QDialog):
         """)
         self.list_widget.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         container_layout.addWidget(self.list_widget)
-        main_layout.addWidget(self.container)
         self.search_input.textChanged.connect(self.filter_commands)
         self.list_widget.itemActivated.connect(self.execute_command)
         self.populate_list(self.commands)

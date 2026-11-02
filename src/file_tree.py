@@ -2,11 +2,7 @@ import os
 import shutil
 
 from PyQt5.QtGui import QIcon
-from PyQt5.QtWidgets import (
-    QAbstractItemView,
-    QStyledItemDelegate,
-    QTreeView,
-)
+from PyQt5.QtWidgets import QAbstractItemView, QStyledItemDelegate, QTreeView
 
 from .message_box import QMessageBox
 

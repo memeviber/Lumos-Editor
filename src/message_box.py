@@ -1,19 +1,11 @@
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QIcon
-from PyQt5.QtWidgets import (
-    QDialog,
-    QDialogButtonBox,
-    QHBoxLayout,
-    QLabel,
-    QStyle,
-    QVBoxLayout,
-)
+from PyQt5.QtWidgets import QDialogButtonBox, QHBoxLayout, QLabel, QStyle, QVBoxLayout
 
-from .themed_dialog import ThemedDialogTitleBar
 from .theme_manager import theme
+from .themed_dialog import ThemedBaseDialog, ThemedDialogTitleBar
 
 
-class QMessageBox(QDialog):
+class QMessageBox(ThemedBaseDialog):
     NoIcon = 0
     Information = 1
     Warning = 2
@@ -40,62 +32,26 @@ class QMessageBox(QDialog):
     RestoreDefaults = QDialogButtonBox.RestoreDefaults
 
     def __init__(self, parent=None):
-        super().__init__(parent, Qt.Dialog | Qt.FramelessWindowHint)
+        super().__init__(
+            parent,
+            Qt.Dialog | Qt.FramelessWindowHint,
+            "ThemedMessageBoxContainer",
+        )
         self._icon = self.NoIcon
         self._standard_buttons = self.Ok
         self._default_button = None
-        self.setObjectName("ThemedMessageBox")
+
         self.setMinimumWidth(380)
         self.setMaximumWidth(560)
-        self.setStyleSheet(
-            f"""
-            QDialog#ThemedMessageBox {{
-                background-color: {theme.color2};
-                color: {theme.color27};
-                border: 1px solid {theme.color13};
-                border-radius: 8px;
-            }}
-            QLabel {{
-                color: {theme.color27};
-                background: transparent;
-            }}
-            QPushButton {{
-                background-color: {theme.color7};
-                color: {theme.color27};
-                border: 1px solid {theme.color13};
-                border-radius: 4px;
-                min-width: 76px;
-                padding: 6px 12px;
-            }}
-            QPushButton:hover {{
-                background-color: {theme.color9};
-            }}
-            QPushButton:pressed {{
-                background-color: {theme.color11};
-            }}
-            QPushButton:default {{
-                background-color: {theme.color35};
-                color: {theme.color31};
-                border-color: {theme.color35};
-            }}
-            QPushButton:default:hover {{
-                background-color: {theme.color37};
-            }}
-            """
-        )
 
-        root_layout = QVBoxLayout(self)
-        root_layout.setContentsMargins(1, 1, 1, 1)
-        root_layout.setSpacing(0)
-
-        self.title_bar = ThemedDialogTitleBar(self)
+        self.title_bar = ThemedDialogTitleBar(self.container)
         self.title_bar.closeRequested.connect(self.reject)
-        root_layout.addWidget(self.title_bar)
+        self.content_layout.addWidget(self.title_bar)
 
         content_layout = QHBoxLayout()
         content_layout.setContentsMargins(20, 18, 20, 14)
         content_layout.setSpacing(14)
-        self.message_icon_label = QLabel(self)
+        self.message_icon_label = QLabel(self.container)
         self.message_icon_label.setFixedSize(32, 32)
         self.message_icon_label.hide()
         content_layout.addWidget(self.message_icon_label, 0, Qt.AlignTop)
@@ -103,24 +59,24 @@ class QMessageBox(QDialog):
         text_layout = QVBoxLayout()
         text_layout.setContentsMargins(0, 0, 0, 0)
         text_layout.setSpacing(6)
-        self.text_label = QLabel(self)
+        self.text_label = QLabel(self.container)
         self.text_label.setWordWrap(True)
         text_layout.addWidget(self.text_label)
-        self.informative_label = QLabel(self)
+        self.informative_label = QLabel(self.container)
         self.informative_label.setWordWrap(True)
         self.informative_label.setStyleSheet(f"color: {theme.color26};")
         self.informative_label.hide()
         text_layout.addWidget(self.informative_label)
         content_layout.addLayout(text_layout, 1)
-        root_layout.addLayout(content_layout, 1)
+        self.content_layout.addLayout(content_layout, 1)
 
-        self.button_box = QDialogButtonBox(self)
+        self.button_box = QDialogButtonBox(self.container)
         self.button_box.setStyleSheet(
-            f"""
-            QDialogButtonBox {{
+            """
+            QDialogButtonBox {
                 background: transparent;
                 border: none;
-            }}
+            }
             """
         )
         self.button_box.clicked.connect(self._on_button_clicked)
@@ -128,7 +84,7 @@ class QMessageBox(QDialog):
         buttons_layout.setContentsMargins(20, 0, 20, 18)
         buttons_layout.addStretch(1)
         buttons_layout.addWidget(self.button_box)
-        root_layout.addLayout(buttons_layout)
+        self.content_layout.addLayout(buttons_layout)
 
         self.setStandardButtons(self._standard_buttons)
 
@@ -195,9 +151,7 @@ class QMessageBox(QDialog):
         self.done(int(self.button_box.standardButton(button)))
 
     @classmethod
-    def _show_message(
-        cls, parent, title, text, icon, buttons=None, defaultButton=None
-    ):
+    def _show_message(cls, parent, title, text, icon, buttons=None, defaultButton=None):
         box = cls(parent)
         box.setIcon(icon)
         box.setWindowTitle(title)
@@ -215,12 +169,18 @@ class QMessageBox(QDialog):
 
     @classmethod
     def warning(cls, parent, title, text, buttons=None, defaultButton=None):
-        return cls._show_message(parent, title, text, cls.Warning, buttons, defaultButton)
+        return cls._show_message(
+            parent, title, text, cls.Warning, buttons, defaultButton
+        )
 
     @classmethod
     def critical(cls, parent, title, text, buttons=None, defaultButton=None):
-        return cls._show_message(parent, title, text, cls.Critical, buttons, defaultButton)
+        return cls._show_message(
+            parent, title, text, cls.Critical, buttons, defaultButton
+        )
 
     @classmethod
     def question(cls, parent, title, text, buttons=None, defaultButton=None):
-        return cls._show_message(parent, title, text, cls.Question, buttons, defaultButton)
+        return cls._show_message(
+            parent, title, text, cls.Question, buttons, defaultButton
+        )

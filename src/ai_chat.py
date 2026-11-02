@@ -30,13 +30,10 @@ from PyQt5.QtWidgets import (
 
 from . import md_renderer
 from .message_box import QMessageBox
-from .themed_dialog import (
-    ThemedFileDialog as QFileDialog,
-    ThemedInputDialog as QInputDialog,
-    set_input_placeholder_color,
-    themed_input_stylesheet,
-)
 from .theme_manager import theme
+from .themed_dialog import ThemedFileDialog as QFileDialog
+from .themed_dialog import ThemedInputDialog as QInputDialog
+from .themed_dialog import set_input_placeholder_color, themed_input_stylesheet
 
 MARKDOWN_CSS = f"""
 body {{
