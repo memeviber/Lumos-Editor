@@ -70,7 +70,6 @@ Lumos currently supports **Windows and Linux**. macOS has not been tested or opt
 4. **(Optional) Add Custom Themes:**
     -   Create a `themes/your-theme` folder in the root directory.
     -   Add your custom `theme.json` theme files to the [themes](themes) folder.
-    -   Set `theme.accent-color` to customize UI accents independently of syntax highlighting. If omitted, the keyword color is used for backward compatibility.
 
 5.  **Run the editor:**
     ```sh

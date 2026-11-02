@@ -1,10 +1,12 @@
 /src/__pycache__/
+/__pycache__/
 /venv/
 /build/
 /dist/
 /Output/
 *.spec
-.ruff_cache/
+/.ruff_cache/
+/.vscode/
 /resources/chevron-down.png
 /resources/chevron-left.png
 /resources/chevron-right-window.png

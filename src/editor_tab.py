@@ -9,8 +9,23 @@ from urllib.parse import unquote
 
 from PyQt5.Qsci import QsciScintilla
 from PyQt5.QtCore import QEvent, QObject, QPointF, QRectF, Qt, QTimer, pyqtSignal
-from PyQt5.QtGui import QColor, QDesktopServices, QFont, QPainter, QPalette
-from PyQt5.QtWidgets import QApplication, QHBoxLayout, QScrollBar, QTextBrowser, QWidget
+from PyQt5.QtGui import (
+    QColor,
+    QDesktopServices,
+    QFont,
+    QKeySequence,
+    QPainter,
+    QPalette,
+)
+from PyQt5.QtWidgets import (
+    QAction,
+    QApplication,
+    QHBoxLayout,
+    QMenu,
+    QScrollBar,
+    QTextBrowser,
+    QWidget,
+)
 
 from src.lexer import (
     JsonLexer,
@@ -624,6 +639,8 @@ class EditorTab(QWidget):
         self.setStyleSheet("border: none; margin: 0px; padding: 0px;")
         self.setLayout(main_layout)
         self.editor = QsciScintilla()
+        self.editor.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.editor.customContextMenuRequested.connect(self.show_editor_context_menu)
         self.minimap = MiniMap(self.editor)
         self.filepath = filepath
         self.is_modified = False
@@ -1134,6 +1151,81 @@ class EditorTab(QWidget):
                     self.editor.autoCompleteFromAPIs()
                     return True
         return super().eventFilter(obj, event)
+
+    def show_editor_context_menu(self, position):
+        menu = QMenu(self.editor)
+        menu.setStyleSheet(
+            f"""
+            QMenu {{
+                background-color: {theme.color2};
+                color: {theme.color27};
+                border: 1px solid {theme.color12};
+                padding: 4px;
+            }}
+            QMenu::item {{
+                padding: 6px 24px 6px 20px;
+            }}
+            QMenu::item:selected {{
+                background-color: {theme.color9};
+                color: {theme.color27};
+            }}
+            QMenu::item:disabled {{
+                color: {theme.color22};
+            }}
+            QMenu::separator {{
+                height: 1px;
+                background: {theme.color12};
+                margin: 4px 0px;
+            }}
+            """
+        )
+
+        def add_action(label, shortcut, callback, enabled=True):
+            action = QAction(label, menu)
+            action.setShortcut(shortcut)
+            action.setEnabled(enabled)
+            action.triggered.connect(callback)
+            menu.addAction(action)
+
+        has_selection = self.editor.hasSelectedText()
+        editable = not self.editor.isReadOnly()
+        clipboard_has_text = bool(QApplication.clipboard().text())
+
+        add_action(
+            "Undo",
+            QKeySequence.Undo,
+            self.editor.undo,
+            bool(self.editor.SendScintilla(QsciScintilla.SCI_CANUNDO)),
+        )
+        add_action(
+            "Redo",
+            QKeySequence.Redo,
+            self.editor.redo,
+            bool(self.editor.SendScintilla(QsciScintilla.SCI_CANREDO)),
+        )
+        menu.addSeparator()
+        add_action("Cut", QKeySequence.Cut, self.editor.cut, has_selection and editable)
+        add_action("Copy", QKeySequence.Copy, self.editor.copy, has_selection)
+        add_action(
+            "Paste",
+            QKeySequence.Paste,
+            self.editor.paste,
+            editable and clipboard_has_text,
+        )
+        add_action(
+            "Delete",
+            QKeySequence.Delete,
+            lambda: self.editor.replaceSelectedText(""),
+            has_selection and editable,
+        )
+        menu.addSeparator()
+        add_action(
+            "Select All",
+            QKeySequence.SelectAll,
+            lambda: self.editor.selectAll(),
+            bool(self.editor.text()),
+        )
+        menu.exec_(self.editor.mapToGlobal(position))
 
     def toggle_comment(self, text):
         lines = text.splitlines(True)

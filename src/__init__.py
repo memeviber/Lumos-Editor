@@ -7,6 +7,7 @@ from .find_replace import FindReplaceDialog
 from .media_viewer import AudioViewer, ImageViewer, VideoViewer
 from .plugin_manager import PluginDialog, PluginManager
 from .search_worker import SearchWorker
+from .splash_screen import StartupSplash
 from .source_control import SourceControlTab
 from .split_tab import SplitTab
 from .terminal import Terminal
@@ -30,4 +31,5 @@ __all__ = [
     "CommandPalette",
     "SearchWorker",
     "Terminal",
+    "StartupSplash",
 ]

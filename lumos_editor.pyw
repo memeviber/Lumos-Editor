@@ -65,6 +65,7 @@ from src import (
     PluginManager,
     SearchWorker,
     SourceControlTab,
+    StartupSplash,
     SplitTab,
     Terminal,
     VideoViewer,
@@ -733,6 +734,13 @@ class MainWindow(QWidget):
                 border: 1px solid {theme.color12};
                 padding: 4px;
             }}
+            QMenu::indicator {{
+                width: 16px;
+                height: 16px;
+            }}
+            QMenu::indicator:checked {{
+                image: url(resources:/checkmark.png);
+            }}
             QMenu::item {{
                 padding: 6px 24px 6px 20px;
                 border-radius: 0px;
@@ -1275,6 +1283,13 @@ class MainWindow(QWidget):
                 color: {theme.color27};
                 border: 1px solid {theme.color9};
                 padding: 4px;
+            }}
+            QMenu::indicator {{
+                width: 16px;
+                height: 16px;
+            }}
+            QMenu::indicator:checked {{
+                image: url(resources:/checkmark.png);
             }}
             QMenu::item {{
                 padding: 6px 24px 6px 20px;
@@ -2918,7 +2933,18 @@ def main():
             theme.reload_theme()
         except Exception as e:
             print(f"Error loading theme at startup: {e}")
+        splash = StartupSplash()
+        splash.show()
+        app.processEvents()
         window = MainWindow()
+
+        def finish_splash_when_ready():
+            if window.isVisible():
+                splash.finish(window)
+            else:
+                QTimer.singleShot(50, finish_splash_when_ready)
+
+        QTimer.singleShot(0, finish_splash_when_ready)
         exit_code = app.exec_()
         if not app.property("restart_requested"):
             sys.exit(exit_code)
