@@ -77,11 +77,17 @@ macOS has not been tested or optimized and is not officially supported. Some fea
 
 Drag any window edge or corner to resize it; the mouse cursor indicates the resize direction. You can also use the size grip in the bottom-right corner of the status bar.
 
-While the mouse is dragging the size grip, the editor temporarily pauses content rendering and hides the window border and drop shadow. The editor background is shown during the resize, and the full interface is rendered again when dragging ends. This avoids border, shadow, and menu-bar flicker.
+While the window is being resized or changing size through snap/maximize shortcuts, the editor temporarily pauses content rendering and displays an overlay. During a drag, the overlay hides the border and drop shadow; when snapping to half the screen, the border remains square and the shadow stays hidden. The full interface is rendered again when the transition ends. This avoids border, shadow, and menu-bar flicker.
 
 The menu bar is normally hidden behind the arrow icon in the top-right corner of the title bar.
 
 Use **Alt + Left/Right Arrow** to place the editor on either half of the active monitor, **Alt + Up Arrow** to maximize, and **Alt + Down Arrow** to restore it. Windows reserves the **Windows + Arrow** shortcuts for native window snapping, which is not supported by this custom frameless window.
+
+### Why Lumos Uses a Custom Frameless Window
+
+Lumos builds its frameless window from PyQt5 widgets instead of using a package such as [**PyQt5-Frameless-Window**](https://pypi.org/project/PyQt5-Frameless-Window/). This gives the editor direct control over how its custom title bar, resize handles, border, shadow, snap shortcuts, and transition overlay work together with the rest of the interface and its themes. It also avoids adding a separate window-management dependency. PyPI classifies that package as GPLv3, while Lumos is distributed under the MIT License; avoiding the dependency keeps third-party license obligations clearer when distributing Lumos and helps preserve the project's MIT licensing.
+
+The trade-off is that Lumos must maintain these window behaviors itself. In particular, its custom frame does not receive Windows' native **Windows + Arrow** snapping behavior; use the documented **Alt + Arrow** shortcuts instead. Using a GPL-licensed dependency would not automatically change Lumos's license, but its terms and compatibility would need careful review before distribution.
 
 ## Installation
 
