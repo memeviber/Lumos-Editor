@@ -1555,8 +1555,11 @@ class MainWindow(QWidget):
                     padding-left: 4px;
                 }}
             """)
-            self.border_overlay.hide()
+            self.border_overlay.radius = 0 if self._snap_side is not None else RADIUS
+            self.border_overlay.setVisible(self._snap_side is not None)
             self.shadow_effect.setEnabled(False)
+            if self._snap_side is not None:
+                QTimer.singleShot(0, self._sync_border_geometry)
         else:
             self.main_layout.setContentsMargins(
                 SHADOW_PADDING, SHADOW_PADDING, SHADOW_PADDING, SHADOW_PADDING
@@ -1597,7 +1600,7 @@ class MainWindow(QWidget):
         self._sync_resize_handles()
 
     def _sync_border_geometry(self):
-        if not self.isMaximized() and self._snap_side is None:
+        if not self.isMaximized():
             self.border_overlay.setGeometry(self.container.geometry())
 
     def begin_interactive_resize(self):
