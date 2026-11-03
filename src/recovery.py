@@ -22,6 +22,8 @@ def write_recovery(recovery_id, filepath, content):
     RECOVERY_DIR.mkdir(parents=True, exist_ok=True)
     recovery_path = RECOVERY_DIR / f"{recovery_id}.json"
     temporary_path = RECOVERY_DIR / f"{recovery_id}.tmp"
+    backup_path = RECOVERY_DIR / f"{recovery_id}.json.bak"
+    backup_temporary_path = RECOVERY_DIR / f"{recovery_id}.bak.tmp"
     payload = {
         "id": recovery_id,
         "filepath": filepath,
@@ -34,41 +36,82 @@ def write_recovery(recovery_id, filepath, content):
             json.dump(payload, recovery_file, ensure_ascii=False)
             recovery_file.flush()
             os.fsync(recovery_file.fileno())
+        if recovery_path.exists():
+            with recovery_path.open("rb") as previous_file:
+                with backup_temporary_path.open("wb") as backup_file:
+                    while True:
+                        chunk = previous_file.read(1024 * 1024)
+                        if not chunk:
+                            break
+                        backup_file.write(chunk)
+                    backup_file.flush()
+                    os.fsync(backup_file.fileno())
+            os.replace(backup_temporary_path, backup_path)
         os.replace(temporary_path, recovery_path)
     except Exception:
-        try:
-            temporary_path.unlink()
-        except FileNotFoundError:
-            pass
+        for path in (temporary_path, backup_temporary_path):
+            try:
+                path.unlink()
+            except FileNotFoundError:
+                pass
         raise
+
+
+def _read_recovery(recovery_path, recovery_id):
+    try:
+        with recovery_path.open("r", encoding="utf-8") as recovery_file:
+            recovery = json.load(recovery_file)
+    except (json.JSONDecodeError, UnicodeError):
+        logger.warning("Skipping corrupted recovery file: %s", recovery_path.name)
+        return None
+    except FileNotFoundError:
+        return None
+    except OSError:
+        logger.exception("Could not read recovery file: %s", recovery_path.name)
+        return None
+
+    if (
+        not isinstance(recovery, dict)
+        or not isinstance(recovery.get("content"), str)
+        or recovery.get("id") != recovery_id
+        or not isinstance(recovery.get("saved_at", ""), str)
+        or (
+            recovery.get("filepath") is not None
+            and not isinstance(recovery.get("filepath"), str)
+        )
+    ):
+        logger.warning("Skipping invalid recovery file: %s", recovery_path.name)
+        return None
+    return recovery
 
 
 def list_recoveries():
     if not RECOVERY_DIR.exists():
         return []
 
+    recovery_ids = {
+        recovery_path.stem for recovery_path in RECOVERY_DIR.glob("*.json")
+    }
+    recovery_ids.update(
+        backup_path.name[:-9] for backup_path in RECOVERY_DIR.glob("*.json.bak")
+    )
+
     recoveries = []
-    for recovery_path in RECOVERY_DIR.glob("*.json"):
-        try:
-            with recovery_path.open("r", encoding="utf-8") as recovery_file:
-                recovery = json.load(recovery_file)
-            recovery_id = recovery_path.stem
-            if (
-                not re.fullmatch(r"[0-9a-f]{32}", recovery_id)
-                or not isinstance(recovery, dict)
-                or not isinstance(recovery.get("content"), str)
-                or recovery.get("id") != recovery_id
-                or not isinstance(recovery.get("saved_at", ""), str)
-                or (
-                    recovery.get("filepath") is not None
-                    and not isinstance(recovery.get("filepath"), str)
-                )
-            ):
-                logger.warning("Skipping invalid recovery file: %s", recovery_path.name)
-                continue
+    for recovery_id in recovery_ids:
+        if not re.fullmatch(r"[0-9a-f]{32}", recovery_id):
+            continue
+
+        recovery = _read_recovery(
+            RECOVERY_DIR / f"{recovery_id}.json",
+            recovery_id,
+        )
+        if recovery is None:
+            recovery = _read_recovery(
+                RECOVERY_DIR / f"{recovery_id}.json.bak",
+                recovery_id,
+            )
+        if recovery is not None:
             recoveries.append(recovery)
-        except (OSError, json.JSONDecodeError):
-            logger.exception("Could not read recovery file: %s", recovery_path.name)
 
     return sorted(
         recoveries,
@@ -83,9 +126,10 @@ def delete_recovery(recovery_id):
         return
 
     recovery_path = RECOVERY_DIR / f"{recovery_id}.json"
-    try:
-        recovery_path.unlink()
-    except FileNotFoundError:
-        pass
-    except OSError:
-        logger.exception("Could not delete recovery file: %s", recovery_path.name)
+    for path in (recovery_path, RECOVERY_DIR / f"{recovery_id}.json.bak"):
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            pass
+        except OSError:
+            logger.exception("Could not delete recovery file: %s", path.name)

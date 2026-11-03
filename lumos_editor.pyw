@@ -2,6 +2,7 @@ import logging
 import os
 import sys
 from functools import partial
+from pathlib import Path
 
 from PyQt5.Qsci import QsciScintilla
 from PyQt5.QtCore import (
@@ -9,6 +10,7 @@ from PyQt5.QtCore import (
     QDir,
     QEvent,
     QFileSystemWatcher,
+    QLockFile,
     QRect,
     QRectF,
     QSize,
@@ -94,6 +96,13 @@ from src.themed_dialog import (
 RADIUS = 8
 SHADOW_PADDING = 20
 logger = logging.getLogger(__name__)
+
+
+def _register_resource_paths():
+    QDir.addSearchPath(
+        "resources",
+        os.path.join(os.path.dirname(__file__), f".{os.sep}resources"),
+    )
 
 
 class ExplorerFileTreeDelegate(FileTreeDelegate):
@@ -477,14 +486,13 @@ class TitleBar(QWidget):
         if not self.parent:
             return
         if self.parent.isMaximized():
-            self.parent.showNormal()
+            self.parent.restore_window()
             self.max_btn.setToolTip("Maximize")
             max_icon = QIcon("resources:/restore-window-icon.png")
             if not max_icon.isNull():
                 self.max_btn.setIcon(max_icon)
         else:
-            self.parent.restore_snap_constraints()
-            self.parent.showMaximized()
+            self.parent.maximize_window()
             self.max_btn.setToolTip("Restore")
             restore_icon = QIcon("resources:/restore-window-icon.png")
             if not restore_icon.isNull():
@@ -502,10 +510,7 @@ class MainWindow(QWidget):
         super().__init__()
         self._closing = False
         self.config_manager = ConfigManager()
-        QDir.addSearchPath(
-            "resources",
-            os.path.join(os.path.dirname(__file__), f".{os.sep}resources"),
-        )
+        _register_resource_paths()
         self.setWindowIcon(QIcon("resources:/lumos-icon.png"))
         self.plugin_manager = PluginManager(self, self.config_manager)
         self.resize(1218, 730)
@@ -1013,7 +1018,7 @@ class MainWindow(QWidget):
         self.snap_right_shortcut = QShortcut(QKeySequence("Alt+Right"), self)
         self.snap_right_shortcut.activated.connect(lambda: self.snap_to_half("right"))
         self.snap_up_shortcut = QShortcut(QKeySequence("Alt+Up"), self)
-        self.snap_up_shortcut.activated.connect(self.showMaximized)
+        self.snap_up_shortcut.activated.connect(self.maximize_window)
         self.snap_down_shortcut = QShortcut(QKeySequence("Alt+Down"), self)
         self.snap_down_shortcut.activated.connect(self.restore_window)
         self.project_dir_changed.connect(self.sync_terminal_directory)
@@ -1405,22 +1410,42 @@ class MainWindow(QWidget):
             x += left_width
             width = available.width() - left_width
 
-        if self.isMaximized():
-            self.showNormal()
-        self.setMinimumSize(
-            min(self._window_minimum_size.width(), width),
-            min(self._window_minimum_size.height(), available.height()),
-        )
-        self._snap_side = side
-        self.setGeometry(
-            QRect(x, available.y(), width, available.height())
-        )
+        def apply_snap():
+            self._snap_side = side
+            if self.isMaximized():
+                self.showNormal()
+            self.setMinimumSize(
+                min(self._window_minimum_size.width(), width),
+                min(self._window_minimum_size.height(), available.height()),
+            )
+            self.setGeometry(QRect(x, available.y(), width, available.height()))
+            self.update_overlay_geometry()
+
+        self._with_resize_overlay(apply_snap)
+
+    def maximize_window(self):
+        def maximize():
+            self.restore_snap_constraints()
+            self.showMaximized()
+
+        self._with_resize_overlay(maximize)
+
+    def _with_resize_overlay(self, action):
+        self.begin_interactive_resize()
+        try:
+            action()
+        finally:
+            QTimer.singleShot(0, self.finish_interactive_resize)
 
     def restore_window(self):
-        if self.isMaximized():
-            self.showNormal()
-        if self._snap_side is not None:
-            self.restore_snap_constraints()
+        def restore():
+            if self.isMaximized():
+                self.showNormal()
+            if self._snap_side is not None:
+                self.restore_snap_constraints()
+            self.update_overlay_geometry()
+
+        self._with_resize_overlay(restore)
 
     def restore_snap_constraints(self):
         if self._snap_side is None:
@@ -1493,6 +1518,7 @@ class MainWindow(QWidget):
 
     def update_overlay_geometry(self):
         is_max = self.isMaximized()
+        is_edge_aligned = is_max or self._snap_side is not None
         if hasattr(self, "titlebar") and hasattr(self.titlebar, "max_btn"):
             if is_max:
                 self.titlebar.max_btn.setToolTip("Restore")
@@ -1505,7 +1531,7 @@ class MainWindow(QWidget):
                 if not max_icon.isNull():
                     self.titlebar.max_btn.setIcon(max_icon)
 
-        if is_max:
+        if is_edge_aligned:
             self.main_layout.setContentsMargins(0, 0, 0, 0)
             self.container.setStyleSheet(
                 f"QWidget#container {{ background:{self.bg_inner}; border-radius: 0px; }}"
@@ -1567,7 +1593,8 @@ class MainWindow(QWidget):
             self.shadow_effect.setEnabled(True)
             QTimer.singleShot(0, self._sync_border_geometry)
 
-        self.size_grip.setVisible(not is_max)
+        self.size_grip.setVisible(not is_edge_aligned)
+        self._sync_resize_handles()
 
     def _sync_border_geometry(self):
         if not self.isMaximized() and self._snap_side is None:
@@ -2069,17 +2096,27 @@ class MainWindow(QWidget):
             return None
         abs_path = os.path.abspath(path)
         logger.info("Opening file: path=%s, split_view=%s", abs_path, in_split)
-        if not in_split:
-            for i in range(self.tabs.count()):
-                tab = self.tabs.widget(i)
+        normalized_path = os.path.normcase(os.path.realpath(abs_path))
+        for i in range(self.tabs.count()):
+            tab = self.tabs.widget(i)
+            candidates = tab.get_child_editors() if isinstance(tab, SplitTab) else [tab]
+            for candidate in candidates:
+                candidate_path = getattr(candidate, "filepath", None)
                 if (
-                    hasattr(tab, "filepath")
-                    and tab.filepath
-                    and os.path.abspath(tab.filepath) == abs_path
+                    candidate_path
+                    and os.path.normcase(os.path.realpath(candidate_path))
+                    == normalized_path
                 ):
+                    if in_split:
+                        QMessageBox.information(
+                            self,
+                            "File Already Open",
+                            "This file is already open and cannot be opened again in split view.",
+                        )
+                        return None
                     logger.debug("Reusing existing editor tab for file")
                     self.tabs.setCurrentIndex(i)
-                    return tab
+                    return candidate
         try:
             image_extensions = [
                 ".png",
@@ -3423,36 +3460,71 @@ def main():
     app.setAttribute(Qt.AA_DontCreateNativeWidgetSiblings)
     app.setStyle("Fusion")
     app.setProperty("restart_requested", True)
+    _register_resource_paths()
 
-    while app.property("restart_requested"):
-        app.setProperty("restart_requested", False)
-        try:
-            from src.theme_manager import theme
+    lock_directory = Path.home() / ".lumos_editor"
+    try:
+        lock_directory.mkdir(parents=True, exist_ok=True)
+        instance_lock = QLockFile(str(lock_directory / "instance.lock"))
+        if not instance_lock.tryLock(0):
+            if instance_lock.error() != QLockFile.LockFailedError:
+                logger.error(
+                    "Could not acquire the application instance lock: %s",
+                    instance_lock.error(),
+                )
+                QMessageBox.warning(
+                    None,
+                    "Startup Failed",
+                    "Lumos could not secure its application lock. The editor will not start.",
+                )
+                return 1
+            QMessageBox.warning(
+                None,
+                "Lumos Editor Already Running",
+                "Another Lumos Editor window is already open.",
+            )
+            return 1
+    except OSError:
+        logger.exception("Could not create the application instance lock")
+        QMessageBox.warning(
+            None,
+            "Startup Failed",
+            "Lumos could not secure its application lock. The editor will not start.",
+        )
+        return 1
 
-            theme.reload_theme()
-        except Exception:
-            logger.exception("Could not load theme at startup")
-        tooltip_palette = app.palette()
-        tooltip_palette.setColor(QPalette.ToolTipBase, QColor(theme.color2))
-        tooltip_palette.setColor(QPalette.ToolTipText, QColor(theme.color27))
-        QToolTip.setPalette(tooltip_palette)
-        splash = StartupSplash()
-        splash.show()
-        app.processEvents()
-        window = MainWindow()
+    try:
+        while app.property("restart_requested"):
+            app.setProperty("restart_requested", False)
+            try:
+                from src.theme_manager import theme
 
-        def finish_splash_when_ready():
-            if window.isVisible():
-                splash.finish(window)
-                QTimer.singleShot(0, window._offer_recovery)
-            else:
-                QTimer.singleShot(50, finish_splash_when_ready)
+                theme.reload_theme()
+            except Exception:
+                logger.exception("Could not load theme at startup")
+            tooltip_palette = app.palette()
+            tooltip_palette.setColor(QPalette.ToolTipBase, QColor(theme.color2))
+            tooltip_palette.setColor(QPalette.ToolTipText, QColor(theme.color27))
+            QToolTip.setPalette(tooltip_palette)
+            splash = StartupSplash()
+            splash.show()
+            app.processEvents()
+            window = MainWindow()
 
-        QTimer.singleShot(0, finish_splash_when_ready)
-        exit_code = app.exec_()
-        if not app.property("restart_requested"):
-            sys.exit(exit_code)
+            def finish_splash_when_ready():
+                if window.isVisible():
+                    splash.finish(window)
+                    QTimer.singleShot(0, window._offer_recovery)
+                else:
+                    QTimer.singleShot(50, finish_splash_when_ready)
+
+            QTimer.singleShot(0, finish_splash_when_ready)
+            exit_code = app.exec_()
+            if not app.property("restart_requested"):
+                return exit_code
+    finally:
+        instance_lock.unlock()
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
