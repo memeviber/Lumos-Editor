@@ -315,6 +315,7 @@ class ThemedInputDialog(ThemedBaseDialog):
         self._layout.addWidget(self.title_bar)
 
         content = QWidget(self.container)
+        self._input_container = content
         content_layout = QVBoxLayout(content)
         content_layout.setContentsMargins(16, 14, 16, 8)
         content_layout.setSpacing(10)
@@ -334,6 +335,14 @@ class ThemedInputDialog(ThemedBaseDialog):
         self._layout.addLayout(buttons_layout)
         self.setInputMode(self.TextInput)
 
+    def _remove_input_widget(self):
+        if self._input_widget is None:
+            return
+        self._content_layout.removeWidget(self._input_widget)
+        self._input_widget.hide()
+        self._input_widget.setParent(None)
+        self._input_widget.deleteLater()
+
     def setWindowTitle(self, title):
         super().setWindowTitle(title)
         if hasattr(self, "title_bar"):
@@ -349,10 +358,8 @@ class ThemedInputDialog(ThemedBaseDialog):
 
     def setInputMode(self, mode):
         self._input_mode = mode
-        if self._input_widget is not None:
-            self._content_layout.removeWidget(self._input_widget)
-            self._input_widget.deleteLater()
-        self._input_widget = QLineEdit(self)
+        self._remove_input_widget()
+        self._input_widget = QLineEdit(self._input_container)
         set_input_placeholder_color(self._input_widget)
         self._content_layout.addWidget(self._input_widget)
 
@@ -366,10 +373,8 @@ class ThemedInputDialog(ThemedBaseDialog):
         return ""
 
     def _set_items(self, items, current=0, editable=False):
-        if self._input_widget is not None:
-            self._content_layout.removeWidget(self._input_widget)
-            self._input_widget.deleteLater()
-        self._input_widget = QComboBox(self)
+        self._remove_input_widget()
+        self._input_widget = QComboBox(self._input_container)
         set_input_placeholder_color(self._input_widget)
         self._input_widget.addItems(items)
         self._input_widget.setEditable(editable)
@@ -378,10 +383,8 @@ class ThemedInputDialog(ThemedBaseDialog):
         self._content_layout.addWidget(self._input_widget)
 
     def _set_multiline(self, text):
-        if self._input_widget is not None:
-            self._content_layout.removeWidget(self._input_widget)
-            self._input_widget.deleteLater()
-        self._input_widget = QTextEdit(self)
+        self._remove_input_widget()
+        self._input_widget = QTextEdit(self._input_container)
         set_input_placeholder_color(self._input_widget)
         self._input_widget.setPlainText(text)
         self._input_widget.setMinimumSize(360, 120)
