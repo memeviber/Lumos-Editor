@@ -361,9 +361,18 @@ class SourceControlTab(QWidget):
         try:
             self.branch_btn.setEnabled(True)
             self.ai_commit_button.setEnabled(True)
-            branch = self.repo.active_branch.name
-            self.branch_btn.setText(branch)
-            self.branch_btn.setToolTip(f"Current branch: {branch}")
+            is_detached = self.repo.head.is_detached
+            if is_detached:
+                commit_id = self.repo.head.commit.hexsha[:7]
+                self.branch_btn.setText(f"Detached HEAD ({commit_id})")
+                self.branch_btn.setToolTip(
+                    f"Detached HEAD at commit {self.repo.head.commit.hexsha}"
+                )
+                self._post_commit_action = None
+            else:
+                branch = self.repo.active_branch.name
+                self.branch_btn.setText(branch)
+                self.branch_btn.setToolTip(f"Current branch: {branch}")
             expanded_states = dict(self._group_expanded)
             for index in range(self.changes_tree.topLevelItemCount()):
                 item = self.changes_tree.topLevelItem(index)
@@ -427,7 +436,11 @@ class SourceControlTab(QWidget):
             commits_ahead = 0
             commits_behind = 0
             try:
-                tracking_branch = self.repo.active_branch.tracking_branch()
+                tracking_branch = (
+                    self.repo.active_branch.tracking_branch()
+                    if not is_detached
+                    else None
+                )
                 if tracking_branch:
                     commits_ahead = sum(
                         1
@@ -608,7 +621,7 @@ class SourceControlTab(QWidget):
             return
         branches = [b.name for b in self.repo.branches]
         options = ["+ Create New Branch..."] + branches
-        current = self.repo.active_branch.name
+        current = None if self.repo.head.is_detached else self.repo.active_branch.name
         branch, ok = QInputDialog.getItem(
             self.main_window,
             "Branch Management",
@@ -741,11 +754,14 @@ class SourceControlTab(QWidget):
         try:
             self.repo.index.commit(message)
             committed = True
-            self._post_commit_action = "push"
+            self._post_commit_action = (
+                None if self.repo.head.is_detached else "push"
+            )
             self.commit_message_input.clear()
-            branch = self.repo.active_branch.name
-            self.branch_btn.setText(branch)
-            self.branch_btn.setToolTip(f"Current branch: {branch}")
+            if not self.repo.head.is_detached:
+                branch = self.repo.active_branch.name
+                self.branch_btn.setText(branch)
+                self.branch_btn.setToolTip(f"Current branch: {branch}")
         except Exception as e:
             logger.exception("Git commit failed")
             QMessageBox.warning(self.main_window, "Commit Failed", str(e))
@@ -764,6 +780,13 @@ class SourceControlTab(QWidget):
 
     def push_changes(self):
         if not self.repo:
+            return
+        if self.repo.head.is_detached:
+            QMessageBox.information(
+                self.main_window,
+                "Push Unavailable",
+                "Check out a branch before pushing this commit.",
+            )
             return
         self._git_busy = True
         self.show_progress(True)
@@ -805,6 +828,13 @@ class SourceControlTab(QWidget):
 
     def pull_changes(self):
         if not self.repo:
+            return
+        if self.repo.head.is_detached:
+            QMessageBox.information(
+                self.main_window,
+                "Pull Unavailable",
+                "Check out a branch before pulling changes.",
+            )
             return
         self._git_busy = True
         self.show_progress(True)
