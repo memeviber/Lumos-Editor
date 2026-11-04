@@ -691,6 +691,10 @@ class AIChat(QWidget):
                 border-color: {theme.color38};
                 color: white;
             }}
+            QWidget#AIChat QPushButton#addContextButton,
+            QWidget#AIChat QPushButton#clearContextButton {{
+                padding: 0;
+            }}
             QWidget#AIChat QPushButton#sendButton:hover {{
                 background-color: {theme.color37};
             }}
@@ -853,12 +857,12 @@ class AIChat(QWidget):
         context_header.addWidget(context_label)
         context_actions = QHBoxLayout()
         context_actions.setContentsMargins(0, 0, 0, 0)
-        context_actions.setSpacing(5)
+        context_actions.setSpacing(6)
         self.add_context_button = QPushButton()
         self.add_context_button.setObjectName("addContextButton")
         self.add_context_button.setIcon(QIcon("resources:/plus-icon.png"))
         self.add_context_button.setIconSize(QSize(16, 16))
-        self.add_context_button.setFixedSize(28, 28)
+        self.add_context_button.setFixedSize(38, 28)
         self.add_context_button.setToolTip("Add files for the AI to use as context")
         self.add_context_button.setAccessibleName("Add context files")
         self.add_context_button.clicked.connect(self.add_context_files)
@@ -867,7 +871,7 @@ class AIChat(QWidget):
         self.clear_context_button.setObjectName("clearContextButton")
         self.clear_context_button.setIcon(QIcon("resources:/trash-icon.png"))
         self.clear_context_button.setIconSize(QSize(16, 16))
-        self.clear_context_button.setFixedSize(28, 28)
+        self.clear_context_button.setFixedSize(38, 28)
         self.clear_context_button.setToolTip("Remove all context files from this chat")
         self.clear_context_button.setAccessibleName("Clear context files")
         self.clear_context_button.clicked.connect(self.clear_context_files)
@@ -922,7 +926,8 @@ class AIChat(QWidget):
         self.send_button.setAccessibleName("Send message")
         self.send_button.setToolTip("Send message")
         self.send_button.setIconSize(QSize(18, 18))
-        self.send_button.setFixedSize(38, 34)
+        self.send_button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
+        self.send_button.setFixedWidth(38)
         input_layout.addWidget(self.send_button)
         main_layout.addWidget(input_container)
         self.send_button.clicked.connect(self.send_message)
@@ -935,7 +940,6 @@ class AIChat(QWidget):
             self.add_context_button,
             self.clear_context_button,
             self.context_files_list,
-            self.input_text,
             self.send_button,
         ):
             self._install_hover_glow(widget)
