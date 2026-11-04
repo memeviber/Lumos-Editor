@@ -3,7 +3,9 @@ import logging
 import os
 from pathlib import Path
 
+from PyQt5.QtCore import QByteArray, Qt
 from PyQt5.QtGui import QColor, QPainter, QPixmap
+from PyQt5.QtSvg import QSvgRenderer
 
 logger = logging.getLogger(__name__)
 
@@ -235,6 +237,34 @@ class LumosThemeManager:
 
         for icon in group_b:
             recolor_and_save(icon, color_b)
+
+        svg_icons = {
+            "plus-icon.svg": ("plus-icon.png", QColor(self.color38)),
+            "trash-icon.svg": ("trash-icon.png", QColor(self.color24)),
+        }
+        for template_name, (output_name, target_color) in svg_icons.items():
+            template_path = os.path.join(template_dir, template_name)
+            output_path = os.path.join(output_dir, output_name)
+            if not os.path.exists(template_path):
+                continue
+            try:
+                with open(template_path, "r", encoding="utf-8") as template_file:
+                    svg_data = template_file.read().replace(
+                        "#FFFFFF", target_color.name()
+                    )
+                renderer = QSvgRenderer(QByteArray(svg_data.encode("utf-8")))
+                if not renderer.isValid():
+                    logger.error("Could not render SVG icon template: %s", template_path)
+                    continue
+                pixmap = QPixmap(24, 24)
+                pixmap.fill(Qt.transparent)
+                painter = QPainter(pixmap)
+                renderer.render(painter)
+                painter.end()
+                if not pixmap.save(output_path):
+                    logger.error("Could not save generated icon: %s", output_path)
+            except OSError:
+                logger.exception("Could not load SVG icon template: %s", template_path)
 
 
 try:

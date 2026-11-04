@@ -514,7 +514,7 @@ class MainWindow(QWidget):
         self.setWindowIcon(QIcon("resources:/lumos-icon.png"))
         self.plugin_manager = PluginManager(self, self.config_manager)
         self.resize(1218, 730)
-        self.setMinimumSize(812, 630)
+        self.setMinimumSize(640, 480)
         self._window_minimum_size = self.minimumSize()
         self._snap_side = None
         qr = self.frameGeometry()
@@ -608,50 +608,53 @@ class MainWindow(QWidget):
         layout = QHBoxLayout(self.central_widget)
         layout.setContentsMargins(0, 0, 0, 0)
         self.left_container = QWidget()
+        self.left_container.setMinimumWidth(180)
         left_layout = QVBoxLayout(self.left_container)
         left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.setSpacing(0)
         explorer_header = QWidget()
-        explorer_header.setFixedHeight(35)
+        explorer_header.setFixedHeight(32)
         explorer_header.setStyleSheet(
             f"background: {theme.color2}; border-bottom: 1px solid {theme.color1};"
         )
-        header_layout = QHBoxLayout(explorer_header)
-        header_layout.setContentsMargins(4, 0, 4, 0)
-        header_layout.setSpacing(3)
+        header_layout = QVBoxLayout(explorer_header)
+        header_layout.setContentsMargins(4, 3, 4, 3)
+        header_layout.setSpacing(2)
         tab_style = f"""
             QPushButton {{
                 color: {theme.color23}; font-size: 9px; font-weight: bold;
-                letter-spacing: 0.2px; background: transparent; border: none; padding: 2px;
+                background: transparent; border: 1px solid transparent;
+                border-radius: 4px; padding: 2px 4px;
             }}
-            QPushButton:hover {{ color: {theme.color27}; }}
+            QPushButton:hover {{
+                color: {theme.color27}; background: {theme.color9};
+                border-color: {theme.color13};
+            }}
             QPushButton:checked {{ color: {theme.color31}; border-bottom: 2px solid {theme.color38}; }}
         """
-        self.btn_nav_explorer = QPushButton("E")
+        navigation_row = QHBoxLayout()
+        navigation_row.setContentsMargins(0, 0, 0, 0)
+        navigation_row.setSpacing(3)
+        self.btn_nav_explorer = QPushButton("Explorer")
         self.btn_nav_explorer.setCheckable(True)
         self.btn_nav_explorer.setChecked(True)
         self.btn_nav_explorer.setStyleSheet(tab_style)
-        self.btn_nav_explorer.setToolTip("Explorer")
         self.btn_nav_explorer.setAccessibleName("Explorer")
-        self.btn_nav_explorer.setFixedWidth(24)
-        self.btn_nav_search = QPushButton("S")
+        self.btn_nav_search = QPushButton("Search")
         self.btn_nav_search.setCheckable(True)
         self.btn_nav_search.setStyleSheet(tab_style)
-        self.btn_nav_search.setToolTip("Search")
         self.btn_nav_search.setAccessibleName("Search")
-        self.btn_nav_search.setFixedWidth(24)
-        self.btn_nav_source = QPushButton("G")
+        self.btn_nav_source = QPushButton("Source Control")
         self.btn_nav_source.setCheckable(True)
         self.btn_nav_source.setStyleSheet(tab_style)
-        self.btn_nav_source.setToolTip("Source Control")
         self.btn_nav_source.setAccessibleName("Source Control")
-        self.btn_nav_source.setFixedWidth(24)
-        header_layout.addWidget(self.btn_nav_explorer)
-        header_layout.addWidget(self.btn_nav_search)
-        header_layout.addWidget(self.btn_nav_source)
-        header_layout.addStretch()
+        navigation_row.addWidget(self.btn_nav_explorer, 1)
+        navigation_row.addWidget(self.btn_nav_search, 1)
+        navigation_row.addWidget(self.btn_nav_source, 1)
         self.toggle_tree = QPushButton()
         self.toggle_tree.setIcon(QIcon("resources:/close-icon.png"))
+        self.toggle_tree.setAccessibleName("Close left panel")
+        self.toggle_tree.setToolTip("Close left panel")
         self.toggle_tree.setFixedSize(24, 24)
         self.toggle_tree.setStyleSheet(
             f"""
@@ -670,7 +673,8 @@ class MainWindow(QWidget):
         """
         )
         self.toggle_tree.clicked.connect(self.toggle_left_panel)
-        header_layout.addWidget(self.toggle_tree)
+        navigation_row.addWidget(self.toggle_tree)
+        header_layout.addLayout(navigation_row)
         left_layout.addWidget(explorer_header)
         self.folder_section = QWidget()
         folder_layout = QHBoxLayout(self.folder_section)
@@ -780,25 +784,62 @@ class MainWindow(QWidget):
         self.terminal_overlay.closed.connect(self.hide_integrated_terminal)
         self.right_splitter.addWidget(self.terminal_overlay)
         self.content_splitter = QSplitter(Qt.Horizontal)
-        self.content_splitter.setHandleWidth(3)
+        self.content_splitter.setObjectName("AIChatSplitter")
+        self.content_splitter.setHandleWidth(1)
         self.content_splitter.setChildrenCollapsible(False)
         self.content_splitter.addWidget(self.right_splitter)
         self.ai_panel = QWidget()
-        self.ai_panel.setMinimumWidth(300)
+        self.ai_panel.setObjectName("AIPanel")
+        self.ai_panel.setMinimumWidth(220)
+        self.ai_panel.setStyleSheet(f"""
+            QWidget#AIPanel {{
+                background-color: {theme.color2};
+                border: none;
+            }}
+            QWidget#AIChatPanelHeader {{
+                background-color: {theme.color2};
+                border-bottom: 1px solid {theme.color1};
+            }}
+            QLabel#AIChatPanelTitle {{
+                color: {theme.color23};
+                font-size: 11px;
+                font-weight: bold;
+                background: transparent;
+            }}
+            QPushButton#AIChatPanelClose {{
+                background: transparent;
+                border: 1px solid transparent;
+                border-radius: 4px;
+                padding: 4px;
+            }}
+            QPushButton#AIChatPanelClose:hover {{
+                background: {theme.color9};
+                border-color: {theme.color13};
+            }}
+            QPushButton#AIChatPanelClose:pressed {{
+                background: {theme.color12};
+            }}
+        """)
         self.ai_panel_layout = QVBoxLayout(self.ai_panel)
         self.ai_panel_layout.setContentsMargins(0, 0, 0, 0)
         self.ai_panel_layout.setSpacing(0)
         ai_panel_header = QWidget()
+        ai_panel_header.setObjectName("AIChatPanelHeader")
+        ai_panel_header.setFixedHeight(35)
         ai_panel_header_layout = QHBoxLayout(ai_panel_header)
         ai_panel_header_layout.setContentsMargins(10, 4, 4, 4)
-        ai_panel_title = QLabel("AI CHAT")
+        ai_panel_title = QLabel("AI Assistant")
+        ai_panel_title.setObjectName("AIChatPanelTitle")
         ai_panel_title.setStyleSheet(
             f"color: {theme.color23}; font-size: 11px; font-weight: bold;"
         )
         ai_panel_header_layout.addWidget(ai_panel_title)
         ai_panel_header_layout.addStretch()
         self.ai_panel_close_button = QPushButton()
+        self.ai_panel_close_button.setObjectName("AIChatPanelClose")
         self.ai_panel_close_button.setIcon(QIcon("resources:/close-icon.png"))
+        self.ai_panel_close_button.setAccessibleName("Close AI Assistant panel")
+        self.ai_panel_close_button.setToolTip("Close AI Assistant panel")
         self.ai_panel_close_button.setFixedSize(24, 24)
         self.ai_panel_close_button.clicked.connect(self.hide_ai_chat)
         ai_panel_header_layout.addWidget(self.ai_panel_close_button)
@@ -811,8 +852,8 @@ class MainWindow(QWidget):
         configured_tree_width = self.config_manager.get("explorer_width")
         self.tree_width = (
             configured_tree_width
-            if isinstance(configured_tree_width, int) and configured_tree_width >= 130
-            else 130
+            if isinstance(configured_tree_width, int) and configured_tree_width >= 180
+            else 180
         )
         logger.info(
             "Explorer initialized: configured_width=%r, applied_width=%s",
@@ -1019,6 +1060,10 @@ class MainWindow(QWidget):
             QSplitter::handle:horizontal {{
                 width: 1px;
             }}
+            QSplitter#AIChatSplitter::handle:horizontal {{
+                width: 1px;
+                background-color: {QColor(theme.color2).lighter(120).name() if theme.is_dark else QColor(theme.color2).darker(120).name()};
+            }}
             QSplitter::handle:vertical {{
                 height: 1px;
             }}
@@ -1123,7 +1168,7 @@ class MainWindow(QWidget):
             )
             return
         previous_sizes = sizes
-        self.tree_width = min(max(self.tree_width, 130), total_width - 1)
+        self.tree_width = min(max(self.tree_width, 180), total_width - 1)
         self.splitter.setSizes(
             [self.tree_width, total_width - self.tree_width]
         )
@@ -1408,9 +1453,9 @@ class MainWindow(QWidget):
                 saved_tree_width,
             )
             self.tree_width = (
-                max(130, saved_tree_width)
+                max(180, saved_tree_width)
                 if isinstance(saved_tree_width, int)
-                else 130
+                else 180
             )
         if session_state.get("project_dir"):
             self.load_folder(session_state["project_dir"])
@@ -1990,9 +2035,13 @@ class MainWindow(QWidget):
         self.ai_panel.show()
         available_width = sum(self.content_splitter.sizes())
         configured_width = self.config_manager.get("ai_panel_width", 360)
-        ai_width = max(300, configured_width if isinstance(configured_width, int) else 360)
+        requested_ai_width = (
+            configured_width if isinstance(configured_width, int) else 360
+        )
+        max_ai_width = max(220, available_width - 200)
+        ai_width = min(max(220, requested_ai_width), max_ai_width)
         self.content_splitter.setSizes(
-            [max(400, available_width - ai_width), ai_width]
+            [max(200, available_width - ai_width), ai_width]
         )
         self.ai_chat_widget.input_text.setFocus()
         return self.ai_chat_widget

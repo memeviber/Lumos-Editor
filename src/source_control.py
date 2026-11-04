@@ -5,15 +5,17 @@ import time
 
 from git import Repo
 from git.exc import InvalidGitRepositoryError
+from git.remote import PushInfo
 from PyQt5.QtCore import Qt, QThread, QTimer, pyqtSignal, pyqtSlot
-from PyQt5.QtGui import QFont, QIcon
+from PyQt5.QtGui import QColor, QFont, QIcon, QPalette
 from PyQt5.QtWidgets import (
     QFrame,
     QHBoxLayout,
-    QLabel,
     QMenu,
     QProgressBar,
     QPushButton,
+    QSizePolicy,
+    QTextEdit,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -59,82 +61,88 @@ class SourceControlTab(QWidget):
         self.poller = None
         self._git_busy = False
         self._connected_ai_widget = None
+        self._group_expanded = {"staged": True, "changes": True}
+        self._post_commit_action = None
         self.setup_ui()
         self.initialize_git()
 
     def setup_ui(self):
         self.setObjectName("SourceControlTab")
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(15, 15, 15, 15)
-        main_layout.setSpacing(12)
+        main_layout.setContentsMargins(8, 8, 8, 8)
+        main_layout.setSpacing(6)
         header_frame = QFrame()
         header_frame.setObjectName("headerFrame")
         header_layout = QHBoxLayout(header_frame)
-        header_layout.setContentsMargins(12, 8, 12, 8)
-        branch_layout = QHBoxLayout()
+        header_layout.setContentsMargins(6, 3, 4, 3)
         self.branch_btn = QPushButton("Initializing...")
+        self.branch_btn.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
+        self.branch_btn.setAccessibleName("Current Git branch")
         font = self.branch_btn.font()
-        font.setPointSize(11)
+        font.setPointSize(9)
         font.setBold(True)
         self.branch_btn.setFont(font)
         self.branch_btn.setObjectName("branchButton")
         self.branch_btn.setCursor(Qt.PointingHandCursor)
         self.branch_btn.clicked.connect(self.manage_branches)
-        branch_layout.addWidget(self.branch_btn)
-        header_layout.addLayout(branch_layout)
-        header_layout.addStretch()
+        header_layout.addWidget(self.branch_btn, 1)
         self.refresh_button = QPushButton()
         self.refresh_button.setFixedSize(28, 28)
         self.refresh_button.setIcon(QIcon("resources:/refresh-icon.png"))
         self.refresh_button.setObjectName("iconButton")
+        self.refresh_button.setAccessibleName("Refresh source control")
+        self.refresh_button.setToolTip("Refresh source control")
         self.refresh_button.clicked.connect(self.update_git_status)
         header_layout.addWidget(self.refresh_button)
         main_layout.addWidget(header_frame)
-        self.status_frame = QFrame()
-        self.status_frame.setObjectName("statusFrame")
-        status_layout = QHBoxLayout(self.status_frame)
-        status_layout.setContentsMargins(12, 6, 12, 6)
-        self.staged_label = QLabel("\u2022 Staged: 0")
-        self.modified_label = QLabel("\u2022 Modified: 0")
-        self.untracked_label = QLabel("\u2022 Untracked: 0")
-        for label in [self.staged_label, self.modified_label, self.untracked_label]:
-            label.setFont(QFont("Segoe UI", 9))
-            status_layout.addWidget(label)
-        status_layout.addStretch()
-        main_layout.addWidget(self.status_frame)
+        self.commit_message_input = QTextEdit()
+        self.commit_message_input.setObjectName("commitMessageInput")
+        self.commit_message_input.setAccessibleName("Commit message")
+        self.commit_message_input.setPlaceholderText("Message (required)")
+        self.commit_message_input.setMinimumHeight(54)
+        self.commit_message_input.setMaximumHeight(72)
+        main_layout.addWidget(self.commit_message_input)
         actions_layout = QHBoxLayout()
-        actions_layout.setSpacing(8)
+        actions_layout.setSpacing(4)
+        self.commit_actions_widget = QWidget()
+        commit_actions_layout = QHBoxLayout(self.commit_actions_widget)
+        commit_actions_layout.setContentsMargins(0, 0, 0, 0)
+        commit_actions_layout.setSpacing(4)
         self.commit_button = QPushButton("Commit")
         self.commit_button.clicked.connect(self.commit_changes)
-        self.commit_button.setFixedHeight(32)
+        self.commit_button.setFixedHeight(29)
         self.commit_button.setObjectName("primaryButton")
-        actions_layout.addWidget(self.commit_button)
         self.ai_commit_button = QPushButton("AI Commit")
         self.ai_commit_button.clicked.connect(self.generate_ai_commit_message)
-        self.ai_commit_button.setFixedHeight(32)
-        actions_layout.addWidget(self.ai_commit_button)
-        self.push_button = QPushButton("Push")
-        self.push_button.clicked.connect(self.push_changes)
-        self.push_button.setFixedHeight(32)
-        actions_layout.addWidget(self.push_button)
-        self.pull_button = QPushButton("Pull")
-        self.pull_button.clicked.connect(self.pull_changes)
-        self.pull_button.setFixedHeight(32)
-        actions_layout.addWidget(self.pull_button)
+        self.ai_commit_button.setFixedHeight(29)
+        self.ai_commit_button.setToolTip(
+            "Generate a commit message from the staged changes"
+        )
+        commit_actions_layout.addWidget(self.commit_button, 3)
+        commit_actions_layout.addWidget(self.ai_commit_button, 2)
+        actions_layout.addWidget(self.commit_actions_widget, 1)
+        self.sync_button = QPushButton()
+        self.sync_button.setFixedHeight(29)
+        self.sync_button.setObjectName("primaryButton")
+        self.sync_button.clicked.connect(self.run_next_sync_action)
+        self.sync_button.hide()
+        actions_layout.addWidget(self.sync_button, 1)
         main_layout.addLayout(actions_layout)
-        tree_header = QLabel("Changes")
-        tree_header.setFont(QFont("Segoe UI", 10, QFont.Bold))
-        main_layout.addWidget(tree_header)
         self.changes_tree = QTreeWidget()
         self.changes_tree.setAnimated(False)
-        self.changes_tree.setHeaderLabels(["File", "Status"])
-        self.changes_tree.setAlternatingRowColors(True)
-        self.changes_tree.setIndentation(12)
+        self.changes_tree.setColumnCount(1)
+        self.changes_tree.setHeaderHidden(True)
+        self.changes_tree.setAlternatingRowColors(False)
+        self.changes_tree.setIndentation(14)
         self.changes_tree.setObjectName("changesTree")
+        tree_palette = self.changes_tree.palette()
+        tree_palette.setColor(QPalette.Highlight, QColor(theme.color9))
+        tree_palette.setColor(QPalette.HighlightedText, QColor(theme.color27))
+        self.changes_tree.setPalette(tree_palette)
         self.changes_tree.setContextMenuPolicy(Qt.CustomContextMenu)
         self.changes_tree.customContextMenuRequested.connect(self.show_context_menu)
-        self.changes_tree.itemDoubleClicked.connect(self.on_item_double_clicked)
-        main_layout.addWidget(self.changes_tree)
+        self.changes_tree.itemClicked.connect(self.on_item_clicked)
+        main_layout.addWidget(self.changes_tree, 1)
         self.progress_bar = QProgressBar()
         self.progress_bar.setVisible(False)
         self.progress_bar.setTextVisible(False)
@@ -155,18 +163,24 @@ class SourceControlTab(QWidget):
                 border: 1px solid {theme.color13};
                 border-radius: 6px;
             }}
-            QFrame#statusFrame {{
-                background-color: {theme.color7};
+            QTextEdit#commitMessageInput {{
+                background-color: {theme.color2};
+                color: {theme.color27};
                 border: 1px solid {theme.color13};
                 border-radius: 4px;
+                padding: 6px;
+                selection-background-color: {theme.color35};
+            }}
+            QTextEdit#commitMessageInput:focus {{
+                border-color: {theme.color35};
             }}
             QPushButton {{
                 background-color: {theme.color10};
                 color: {theme.color26} !important;
                 border: 1px solid {theme.color13};
                 border-radius: 4px;
-                padding: 6px 12px;
-                font-size: 11px;
+                padding: 4px 6px;
+                font-size: 10px;
             }}
             QPushButton:hover {{
                 background-color: {theme.color15};
@@ -214,45 +228,37 @@ class SourceControlTab(QWidget):
             QTreeWidget#changesTree {{
                 background-color: {theme.color2};
                 color: {theme.color26};
-                border: 1px solid {theme.color13};
-                border-radius: 4px;
+                border: none;
                 outline: none;
                 font-size: 11px;
-                alternate-background-color: {theme.color3};
+                selection-background-color: {theme.color9};
+                selection-color: {theme.color27};
             }}
             QTreeWidget#changesTree::item {{
-                padding: 4px;
+                padding: 3px 4px;
                 border: none;
                 color: {theme.color26};
                 background-color: transparent;
             }}
             QTreeWidget#changesTree::item:selected {{
-                background-color: {theme.color11};
-                color: {theme.color31};
+                background-color: {theme.color9};
+                color: {theme.color27};
             }}
             QTreeWidget#changesTree::item:hover {{
-                background-color: {theme.color11};
-                color: {theme.color31};
-            }}
-            QTreeWidget#changesTree QHeaderView::section {{
-                background-color: {theme.color7};
-                color: {theme.color26};
-                border: none;
-                padding: 6px;
-                font-weight: bold;
-                font-size: 11px;
-            }}
-            QTreeWidget#changesTree QHeaderView::section:hover {{
-                background-color: {theme.color13};
-                color: {theme.color31};
+                background-color: {theme.color9};
+                color: {theme.color27};
             }}
             QTreeView::branch:has-children:!has-siblings:closed,
             QTreeView::branch:closed:has-children:has-siblings {{
                 image: url(resources:/chevron-right.png);
+                width: 10px;
+                height: 10px;
             }}
             QTreeView::branch:open:has-children:!has-siblings,
             QTreeView::branch:open:has-children:has-siblings {{
                 image: url(resources:/chevron-down.png);
+                width: 10px;
+                height: 10px;
             }}
             QProgressBar {{
                 background-color: {theme.color7};
@@ -309,6 +315,7 @@ class SourceControlTab(QWidget):
         self.initialize_git()
 
     def initialize_git(self):
+        self._post_commit_action = None
         project_path = self.main_window.current_project_dir
         if not project_path:
             logger.info("Source control disabled: no project folder open")
@@ -341,111 +348,137 @@ class SourceControlTab(QWidget):
             self.branch_btn.setText("Not a git repository")
             if not self.main_window.current_project_dir:
                 self.branch_btn.setText("No folder open")
-            self.staged_label.setText("\u2022 Staged: 0")
-            self.modified_label.setText("\u2022 Modified: 0")
-            self.untracked_label.setText("\u2022 Untracked: 0")
+            self.branch_btn.setToolTip(self.branch_btn.text())
             self.changes_tree.clear()
             item = QTreeWidgetItem(["Open a git repository to see changes."])
             item.setData(0, Qt.UserRole, {"type": "info"})
             self.changes_tree.addTopLevelItem(item)
             self.commit_button.setEnabled(False)
             self.ai_commit_button.setEnabled(False)
-            self.push_button.setEnabled(False)
-            self.pull_button.setEnabled(False)
+            self._update_action_controls(False)
             self.branch_btn.setEnabled(False)
             return
         try:
             self.branch_btn.setEnabled(True)
             self.ai_commit_button.setEnabled(True)
             branch = self.repo.active_branch.name
-            self.branch_btn.setText(f"Branch: {branch}")
+            self.branch_btn.setText(branch)
+            self.branch_btn.setToolTip(f"Current branch: {branch}")
+            expanded_states = dict(self._group_expanded)
+            for index in range(self.changes_tree.topLevelItemCount()):
+                item = self.changes_tree.topLevelItem(index)
+                item_data = item.data(0, Qt.UserRole)
+                if item_data and item_data.get("type") == "header":
+                    expanded_states[item_data["state"]] = item.isExpanded()
             self.changes_tree.clear()
-            staged_changes = self.repo.index.diff("HEAD")
-            modified_changes = self.repo.index.diff(None)
-            untracked_files = self.repo.untracked_files
-            staged_count = len(list(staged_changes))
-            modified_count = len(list(modified_changes))
+            staged_changes = list(self.repo.index.diff("HEAD"))
+            modified_changes = list(self.repo.index.diff(None))
+            untracked_files = list(self.repo.untracked_files)
+            staged_count = len(staged_changes)
+            modified_count = len(modified_changes)
             untracked_count = len(untracked_files)
-            staged_item = QTreeWidgetItem(["Staged Changes", ""])
+            staged_item = QTreeWidgetItem([f"Staged Changes ({staged_count})"])
             staged_item.setData(0, Qt.UserRole, {"type": "header", "state": "staged"})
-            for item in self.repo.index.diff("HEAD"):
-                child = QTreeWidgetItem(staged_item, [item.a_path, "Staged"])
+            staged_item.setFont(0, QFont("Segoe UI", 9, QFont.Bold))
+            for change in staged_changes:
+                child = QTreeWidgetItem(staged_item, [change.a_path])
                 child.setData(
                     0,
                     Qt.UserRole,
-                    {"type": "file", "state": "staged", "path": item.a_path},
+                    {"type": "file", "state": "staged", "path": change.a_path},
                 )
-            if staged_item.childCount() > 0:
-                self.changes_tree.addTopLevelItem(staged_item)
-                staged_item.setExpanded(True)
-            modified_item = QTreeWidgetItem(["Modified Files", ""])
-            modified_item.setData(
-                0, Qt.UserRole, {"type": "header", "state": "modified"}
-            )
-            for item in self.repo.index.diff(None):
-                child = QTreeWidgetItem(modified_item, [item.a_path, "Modified"])
+                child.setToolTip(0, f"Staged: {change.a_path}")
+            self.changes_tree.addTopLevelItem(staged_item)
+            staged_item.setExpanded(expanded_states["staged"])
+            changes_count = modified_count + untracked_count
+            changes_item = QTreeWidgetItem([f"Changes ({changes_count})"])
+            changes_item.setData(0, Qt.UserRole, {"type": "header", "state": "changes"})
+            changes_item.setFont(0, QFont("Segoe UI", 9, QFont.Bold))
+            for change in modified_changes:
+                child = QTreeWidgetItem(changes_item, [change.a_path])
                 child.setData(
                     0,
                     Qt.UserRole,
-                    {"type": "file", "state": "modified", "path": item.a_path},
+                    {"type": "file", "state": "modified", "path": change.a_path},
                 )
-            if modified_item.childCount() > 0:
-                self.changes_tree.addTopLevelItem(modified_item)
-                modified_item.setExpanded(True)
-            untracked_item = QTreeWidgetItem(["Untracked Files", ""])
-            untracked_item.setData(
-                0, Qt.UserRole, {"type": "header", "state": "untracked"}
-            )
-            for file_path in self.repo.untracked_files:
-                child = QTreeWidgetItem(untracked_item, [file_path, "Untracked"])
+                child.setToolTip(0, f"Modified: {change.a_path}")
+            for file_path in untracked_files:
+                child = QTreeWidgetItem(changes_item, [file_path])
                 child.setData(
                     0,
                     Qt.UserRole,
                     {"type": "file", "state": "untracked", "path": file_path},
                 )
-            if untracked_item.childCount() > 0:
-                self.changes_tree.addTopLevelItem(untracked_item)
-                untracked_item.setExpanded(True)
-            self.staged_label.setText(f"\u2022 Staged: {staged_count}")
-            self.modified_label.setText(f"\u2022 Modified: {modified_count}")
-            self.untracked_label.setText(f"\u2022 Untracked: {untracked_count}")
+                child.setToolTip(0, f"Untracked: {file_path}")
+            self.changes_tree.addTopLevelItem(changes_item)
+            changes_item.setExpanded(expanded_states["changes"])
+            self._group_expanded = expanded_states
             logger.debug(
                 "Git status refreshed: staged=%d, modified=%d, untracked=%d",
                 staged_count,
                 modified_count,
                 untracked_count,
             )
-            if self.changes_tree.topLevelItemCount() == 0:
-                no_changes_item = QTreeWidgetItem(["No changes", "Working tree clean"])
+            if staged_count == 0 and changes_count == 0:
+                no_changes_item = QTreeWidgetItem(["No changes"])
                 no_changes_item.setData(0, Qt.UserRole, {"type": "info"})
                 self.changes_tree.addTopLevelItem(no_changes_item)
             has_changes = staged_count > 0 or modified_count > 0 or untracked_count > 0
-            self.commit_button.setEnabled(has_changes)
-            if has_changes:
-                self.push_button.setEnabled(False)
-                self.pull_button.setEnabled(False)
-            else:
-                self.pull_button.setEnabled(True)
-                can_push = False
-                try:
-                    if self.repo.remotes and self.repo.active_branch.tracking_branch():
-                        tracking_branch_name = (
-                            self.repo.active_branch.tracking_branch().name
+            commits_ahead = 0
+            commits_behind = 0
+            try:
+                tracking_branch = self.repo.active_branch.tracking_branch()
+                if tracking_branch:
+                    commits_ahead = sum(
+                        1
+                        for _ in self.repo.iter_commits(
+                            f"{tracking_branch.name}..HEAD"
                         )
-                        commits_ahead = list(
-                            self.repo.iter_commits(f"{tracking_branch_name}..HEAD")
+                    )
+                    commits_behind = sum(
+                        1
+                        for _ in self.repo.iter_commits(
+                            f"HEAD..{tracking_branch.name}"
                         )
-                        if commits_ahead:
-                            can_push = True
-                except Exception:
-                    logger.exception("Could not determine whether branch can be pushed")
-                self.push_button.setEnabled(can_push)
+                    )
+            except Exception:
+                logger.exception("Could not determine remote branch status")
+            if self._post_commit_action is None:
+                if commits_ahead:
+                    self._post_commit_action = "push"
+                elif commits_behind:
+                    self._post_commit_action = "pull"
+            self._update_action_controls(has_changes)
         except Exception as e:
             logger.exception("Could not refresh Git status")
             self.branch_btn.setText(f"Error: {str(e)}")
             self.commit_button.setEnabled(False)
-            self.push_button.setEnabled(False)
-            self.pull_button.setEnabled(False)
+            self._update_action_controls(False)
+
+    def _update_action_controls(self, has_changes):
+        action = self._post_commit_action
+        self.commit_actions_widget.show()
+        self.commit_message_input.show()
+        self.commit_button.setEnabled(has_changes)
+        self.ai_commit_button.setEnabled(has_changes)
+        if action in {"push", "pull"} and not has_changes:
+            self.sync_button.setText("Push" if action == "push" else "Pull")
+            self.sync_button.setToolTip(
+                "Send your commit to the remote repository"
+                if action == "push"
+                else "Get the latest changes from the remote repository"
+            )
+            self.sync_button.setEnabled(bool(self.repo and self.repo.remotes))
+            self.sync_button.show()
+            if action == "push" and self.repo and not self.repo.remotes:
+                self.sync_button.setToolTip(
+                    "Add a remote repository before pushing this commit"
+                )
+            return
+        self.sync_button.hide()
+        if not has_changes:
+            self.commit_button.setEnabled(False)
+            self.ai_commit_button.setEnabled(False)
 
     def show_context_menu(self, pos):
         item = self.changes_tree.itemAt(pos)
@@ -469,16 +502,14 @@ class SourceControlTab(QWidget):
             menu.addAction("Open File", lambda: self.open_file(file_path))
         elif data["type"] == "header":
             state = data["state"]
-            if state in ["modified", "untracked"]:
+            if state == "changes":
                 menu.addAction("Stage All", self.stage_all)
-                menu.addAction(
-                    "Discard All", lambda: self.discard_all_in_category(state)
-                )
+                menu.addAction("Discard All Changes", self.discard_all_changes)
             elif state == "staged":
                 menu.addAction("Unstage All", self.unstage_all)
         menu.exec_(self.changes_tree.viewport().mapToGlobal(pos))
 
-    def on_item_double_clicked(self, item, column):
+    def on_item_clicked(self, item, column):
         data = item.data(0, Qt.UserRole)
         if data and data.get("type") == "file":
             self.open_file(data["path"])
@@ -549,20 +580,23 @@ class SourceControlTab(QWidget):
             self._git_busy = False
             self.update_git_status()
 
-    def discard_all_in_category(self, category):
+    def discard_all_changes(self):
         reply = QMessageBox.question(
             self.main_window,
-            "Discard All",
-            f"Are you sure you want to discard ALL {category} changes? This cannot be undone.",
+            "Discard All Changes",
+            "Are you sure you want to discard all modified and untracked files? This cannot be undone.",
             QMessageBox.Yes | QMessageBox.No,
         )
         if reply == QMessageBox.Yes:
             self._git_busy = True
             try:
-                if category == "untracked":
-                    self.repo.git.clean("-fd")
-                else:
-                    self.repo.git.checkout("--", ".")
+                self.repo.git.checkout("--", ".")
+                self.repo.git.clean("-fd")
+            except Exception as error:
+                logger.exception("Could not discard all working tree changes")
+                QMessageBox.warning(
+                    self.main_window, "Discard Changes Failed", str(error)
+                )
             finally:
                 self._git_busy = False
                 self.update_git_status()
@@ -625,11 +659,16 @@ class SourceControlTab(QWidget):
                 self.stage_all()
             else:
                 return
-        message, ok = QInputDialog.getMultiLineText(
-            self.main_window, "Commit Changes", "Enter commit message:", ""
-        )
-        if ok and message.strip():
-            self._commit_with_message(message.strip())
+        message = self.commit_message_input.toPlainText().strip()
+        if not message:
+            QMessageBox.information(
+                self.main_window,
+                "Commit Message Required",
+                "Enter a commit message before creating the commit.",
+            )
+            self.commit_message_input.setFocus()
+            return
+        self._commit_with_message(message)
 
     def generate_ai_commit_message(self):
         if not self.repo or self._git_busy:
@@ -679,14 +718,8 @@ class SourceControlTab(QWidget):
         self._git_busy = False
         self.ai_commit_button.setEnabled(True)
         self.show_progress(False)
-        message, ok = QInputDialog.getMultiLineText(
-            self.main_window,
-            "Review AI Commit Message",
-            "Edit the message before committing staged changes:",
-            generated_message,
-        )
-        if ok and message.strip():
-            self._commit_with_message(message.strip())
+        self.commit_message_input.setPlainText(generated_message)
+        self.commit_message_input.setFocus()
 
     def _on_ai_commit_message_failed(self, error):
         self._git_busy = False
@@ -702,27 +735,61 @@ class SourceControlTab(QWidget):
         logger.info("Creating Git commit")
         self._git_busy = True
         self.show_progress(True)
+        committed = False
         try:
             self.repo.index.commit(message)
-            self.branch_btn.setText(f"Branch: {self.repo.active_branch.name}")
+            committed = True
+            self._post_commit_action = "push"
+            self.commit_message_input.clear()
+            branch = self.repo.active_branch.name
+            self.branch_btn.setText(branch)
+            self.branch_btn.setToolTip(f"Current branch: {branch}")
         except Exception as e:
             logger.exception("Git commit failed")
             QMessageBox.warning(self.main_window, "Commit Failed", str(e))
         finally:
             self.show_progress(False)
             self._git_busy = False
+            if not committed:
+                self._post_commit_action = None
             self.update_git_status()
+
+    def run_next_sync_action(self):
+        if self._post_commit_action == "push":
+            self.push_changes()
+        elif self._post_commit_action == "pull":
+            self.pull_changes()
 
     def push_changes(self):
         if not self.repo:
             return
         self._git_busy = True
         self.show_progress(True)
+        pushed = False
         try:
             logger.info("Pushing Git changes")
             remote = self.repo.remote()
             branch = self.repo.active_branch
-            remote.push(branch)
+            if branch.tracking_branch():
+                push_results = remote.push(branch)
+                failed_push = next(
+                    (
+                        result
+                        for result in push_results
+                        if result.flags & (PushInfo.ERROR | PushInfo.REJECTED)
+                    ),
+                    None,
+                )
+                if failed_push:
+                    raise RuntimeError(failed_push.summary.strip())
+            else:
+                self.repo.git.push(
+                    "--set-upstream",
+                    remote.name,
+                    branch.name,
+                )
+            pushed = True
+            self._post_commit_action = "pull"
             self.branch_btn.setText("Changes pushed")
         except Exception as e:
             logger.exception("Git push failed")
@@ -730,6 +797,8 @@ class SourceControlTab(QWidget):
         finally:
             self.show_progress(False)
             self._git_busy = False
+            if pushed:
+                self._update_action_controls(False)
             QTimer.singleShot(1500, self.update_git_status)
 
     def pull_changes(self):
@@ -737,10 +806,13 @@ class SourceControlTab(QWidget):
             return
         self._git_busy = True
         self.show_progress(True)
+        pulled = False
         try:
             logger.info("Pulling Git changes")
             remote = self.repo.remote()
             remote.pull()
+            pulled = True
+            self._post_commit_action = None
             self.branch_btn.setText("Changes pulled")
         except Exception as e:
             logger.exception("Git pull failed")
@@ -748,6 +820,8 @@ class SourceControlTab(QWidget):
         finally:
             self.show_progress(False)
             self._git_busy = False
+            if not pulled:
+                self._update_action_controls(False)
             self.update_git_status()
 
     def refresh(self):
