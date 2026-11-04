@@ -1,20 +1,25 @@
 import base64
 import json
+import keyring
 import logging
 import os
+import sys
 import uuid
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import unquote
 
-import google.genai as genai
-from google.genai import types
+from openai import OpenAI
 from PyQt5.QtCore import QSize, Qt, QThread, QTimer, pyqtSignal, pyqtSlot
 from PyQt5.QtGui import QDesktopServices, QIcon
 from PyQt5.QtWidgets import (
     QAction,
     QApplication,
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
     QFrame,
+    QFormLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -37,6 +42,28 @@ from .themed_dialog import ThemedInputDialog as QInputDialog
 from .themed_dialog import set_input_placeholder_color, themed_input_stylesheet
 
 logger = logging.getLogger(__name__)
+
+AI_CREDENTIAL_SERVICE = "Lumos Editor AI"
+
+
+def _secure_keyring():
+    backend = keyring.get_keyring()
+    backend_module = type(backend).__module__
+    if os.name == "nt":
+        is_secure_backend = backend_module == "keyring.backends.Windows"
+    elif sys.platform.startswith("linux"):
+        is_secure_backend = backend_module in (
+            "keyring.backends.SecretService",
+            "keyring.backends.kwallet",
+        )
+    elif sys.platform == "darwin":
+        is_secure_backend = backend_module == "keyring.backends.macOS"
+    else:
+        is_secure_backend = False
+    if not is_secure_backend:
+        raise RuntimeError("No supported operating-system credential store is available.")
+    return keyring
+
 
 MARKDOWN_CSS = f"""
 body {{
@@ -165,30 +192,29 @@ def get_unique_path(path):
         i += 1
 
 
-class GeminiWorker(QThread):
+class AIResponseWorker(QThread):
     chunk_received = pyqtSignal(str)
     finished_streaming = pyqtSignal()
     error_occurred = pyqtSignal(str)
 
-    def __init__(self, client, contents, model, config):
+    def __init__(self, client, messages, model):
         super().__init__()
         self.client = client
-        self.contents = contents
+        self.messages = messages
         self.model = model
-        self.config = config
 
     def run(self):
         logger.info("AI response stream started: model=%s", self.model)
         try:
             full_response_text = ""
-            stream = self.client.models.generate_content_stream(
+            stream = self.client.chat.completions.create(
                 model=self.model,
-                contents=self.contents,
-                config=self.config,
+                messages=self.messages,
+                stream=True,
             )
             for chunk in stream:
-                if hasattr(chunk, "text") and chunk.text is not None:
-                    full_response_text += chunk.text
+                if chunk.choices and chunk.choices[0].delta.content:
+                    full_response_text += chunk.choices[0].delta.content
                     self.chunk_received.emit(full_response_text)
             self.finished_streaming.emit()
             logger.info(
@@ -198,6 +224,129 @@ class GeminiWorker(QThread):
         except Exception as e:
             logger.exception("AI response stream failed")
             self.error_occurred.emit(str(e))
+
+
+class AIProfileDialog(QDialog):
+    profiles_changed = pyqtSignal()
+
+    def __init__(self, config_manager, parent=None):
+        super().__init__(parent)
+        self.config_manager = config_manager
+        self.setWindowTitle("AI Profiles")
+        self.setMinimumWidth(420)
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+        self.profiles = self.config_manager.get("ai_profiles", [])
+        self.profile_combo = QComboBox()
+        self.profile_combo.addItem("New profile", "")
+        for profile in self.profiles:
+            self.profile_combo.addItem(profile.get("name", "AI profile"), profile["id"])
+        self.name_input = QLineEdit()
+        self.base_url_input = QLineEdit()
+        self.base_url_input.setPlaceholderText("https://api.openai.com/v1")
+        self.model_input = QLineEdit()
+        self.model_input.setPlaceholderText("gpt-4o-mini")
+        self.api_key_input = QLineEdit()
+        self.api_key_input.setEchoMode(QLineEdit.Password)
+        form.addRow("Profile", self.profile_combo)
+        form.addRow("Name", self.name_input)
+        form.addRow("Base URL", self.base_url_input)
+        form.addRow("Model", self.model_input)
+        form.addRow("API key", self.api_key_input)
+        layout.addLayout(form)
+        self.button_box = QDialogButtonBox(
+            QDialogButtonBox.Save | QDialogButtonBox.Close
+        )
+        self.delete_button = self.button_box.addButton(
+            "Delete Profile", QDialogButtonBox.DestructiveRole
+        )
+        self.button_box.button(QDialogButtonBox.Save).clicked.connect(self.save_profile)
+        self.button_box.button(QDialogButtonBox.Close).clicked.connect(self.accept)
+        self.delete_button.clicked.connect(self.delete_profile)
+        layout.addWidget(self.button_box)
+        self.profile_combo.currentIndexChanged.connect(self.load_selected_profile)
+        self.load_selected_profile(0)
+
+    def load_selected_profile(self, index):
+        profile_id = self.profile_combo.itemData(index)
+        profile = next((p for p in self.profiles if p["id"] == profile_id), None)
+        self.name_input.setText(profile.get("name", "") if profile else "")
+        self.base_url_input.setText(profile.get("base_url", "") if profile else "")
+        self.model_input.setText(profile.get("model", "") if profile else "")
+        try:
+            self.api_key_input.setText(
+                _secure_keyring().get_password(AI_CREDENTIAL_SERVICE, profile_id) or ""
+                if profile_id
+                else ""
+            )
+        except Exception:
+            logger.exception("Could not read AI API key from the system credential store")
+            self.api_key_input.clear()
+        self.delete_button.setEnabled(bool(profile_id))
+
+    def save_profile(self):
+        name = self.name_input.text().strip()
+        base_url = self.base_url_input.text().strip()
+        model = self.model_input.text().strip()
+        api_key = self.api_key_input.text().strip()
+        if not name or not model or not api_key:
+            QMessageBox.warning(
+                self,
+                "Incomplete AI Profile",
+                "Enter a profile name, model, and API key.",
+            )
+            return
+        profile_id = self.profile_combo.currentData() or uuid.uuid4().hex
+        profile = {
+            "id": profile_id,
+            "name": name,
+            "base_url": base_url,
+            "model": model,
+        }
+        try:
+            _secure_keyring().set_password(
+                AI_CREDENTIAL_SERVICE, profile_id, api_key
+            )
+            self.profiles = [p for p in self.profiles if p.get("id") != profile_id]
+            self.profiles.append(profile)
+            self.config_manager.set("ai_profiles", self.profiles)
+        except Exception:
+            logger.exception("Could not save AI profile credentials")
+            QMessageBox.warning(
+                self,
+                "Could Not Save AI Profile",
+                "The API key could not be saved in the system credential store.",
+            )
+            return
+        self.profile_combo.blockSignals(True)
+        self.profile_combo.clear()
+        self.profile_combo.addItem("New profile", "")
+        for saved_profile in self.profiles:
+            self.profile_combo.addItem(saved_profile["name"], saved_profile["id"])
+        self.profile_combo.setCurrentIndex(self.profile_combo.findData(profile_id))
+        self.profile_combo.blockSignals(False)
+        self.profiles_changed.emit()
+
+    def delete_profile(self):
+        profile_id = self.profile_combo.currentData()
+        if not profile_id:
+            return
+        try:
+            credential_store = _secure_keyring()
+            if credential_store.get_password(AI_CREDENTIAL_SERVICE, profile_id) is not None:
+                credential_store.delete_password(AI_CREDENTIAL_SERVICE, profile_id)
+        except Exception:
+            logger.exception("Could not delete AI profile credential")
+            QMessageBox.warning(
+                self,
+                "Could Not Delete AI Profile",
+                "The API key could not be removed from the system credential store.",
+            )
+            return
+        self.profiles = [p for p in self.profiles if p.get("id") != profile_id]
+        self.config_manager.set("ai_profiles", self.profiles)
+        self.profile_combo.removeItem(self.profile_combo.currentIndex())
+        self.profiles_changed.emit()
 
 
 class AIMessageWidget(QWidget):
@@ -326,17 +475,19 @@ class ChatInput(QTextEdit):
 
 class AIChat(QWidget):
     response_received = pyqtSignal(str)
+    commit_message_generated = pyqtSignal(str)
+    commit_message_failed = pyqtSignal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.is_modified = None
         self.parent = parent
         self.contents = []
-        self.tabname = "AI Chat"
         self.model = None
         self.client = None
         self.current_ai_message_widget = None
         self.worker = None
+        self._commit_generation_text = ""
         self.conversation_history = []
         self.current_file_path = None
         self.current_file_content = None
@@ -345,6 +496,7 @@ class AIChat(QWidget):
         self.config_path = self.data_dir / "config.json"
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.sessions_dir.mkdir(parents=True, exist_ok=True)
+        self.config_manager = getattr(parent, "config_manager", None)
         self.current_session_id = None
         self.current_session_name = None
         self.session_button = None
@@ -375,6 +527,12 @@ class AIChat(QWidget):
             }}
             """)
         header_layout.addWidget(self.session_button)
+        self.profile_combo = QComboBox()
+        self.profile_combo.setMaximumWidth(150)
+        self.profile_combo.setToolTip("Select an AI provider profile")
+        self.profile_combo.currentIndexChanged.connect(self.select_ai_profile)
+        self.profile_button = QPushButton("AI Profiles")
+        self.profile_button.clicked.connect(self.manage_ai_profiles)
         self.search_box = QLineEdit()
         self.search_box.setPlaceholderText("Search chats...")
         self.search_box.setStyleSheet(
@@ -392,6 +550,13 @@ class AIChat(QWidget):
         self.new_button.clicked.connect(self.new_chat)
         header_layout.addWidget(self.new_button)
         main_layout.addWidget(header_container)
+        profile_container = QWidget()
+        profile_layout = QHBoxLayout(profile_container)
+        profile_layout.setContentsMargins(5, 0, 5, 4)
+        profile_layout.addWidget(QLabel("Provider:"))
+        profile_layout.addWidget(self.profile_combo, 1)
+        profile_layout.addWidget(self.profile_button)
+        main_layout.addWidget(profile_container)
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setStyleSheet(f"""
@@ -590,9 +755,9 @@ class AIChat(QWidget):
         if self.current_ai_message_widget:
             final_response_text = self.current_ai_message_widget.raw_text
             if final_response_text:
-                model_part = types.Part(text=final_response_text)
-                model_content = types.Content(role="model", parts=[model_part])
-                self.conversation_history.append(model_content)
+                self.conversation_history.append(
+                    {"role": "assistant", "content": final_response_text}
+                )
         self.current_ai_message_widget = None
         self.send_button.setEnabled(True)
         self.input_text.setFocus()
@@ -626,33 +791,131 @@ class AIChat(QWidget):
         msg_box.setText(f"An error occurred:\n{error_message}")
         msg_box.setWindowIcon(QIcon("resources:/lumos-icon.png"))
         msg_box.exec_()
-        if self.conversation_history and self.conversation_history[-1].role == "user":
+        if (
+            self.conversation_history
+            and self.conversation_history[-1].get("role") == "user"
+        ):
             self.conversation_history.pop()
         self.finalize_ai_message()
 
     def setup_ai(self):
-        api_key = os.environ.get("GEMINI_API_KEY")
-        if not api_key:
-            msg_box = QMessageBox(None)
-            msg_box.setIcon(QMessageBox.Warning)
-            msg_box.setWindowTitle("Setup Error")
-            msg_box.setText(
-                "Environment variable GEMINI_API_KEY not found.\nPlease set the key to use the AI chat feature."
-            )
-            msg_box.setWindowIcon(QIcon("resources:/lumos-icon.png"))
-            msg_box.exec_()
+        self.client = None
+        if not self.config_manager:
+            self.send_button.setEnabled(False)
+            return
+        profiles = self.config_manager.get("ai_profiles", [])
+        selected_id = self.config_manager.get("active_ai_profile")
+        self.profile_combo.blockSignals(True)
+        self.profile_combo.clear()
+        if not profiles:
+            self.profile_combo.addItem("No AI profile", "")
+        else:
+            for profile in profiles:
+                self.profile_combo.addItem(profile.get("name", "AI profile"), profile["id"])
+            selected_index = self.profile_combo.findData(selected_id)
+            self.profile_combo.setCurrentIndex(max(0, selected_index))
+        self.profile_combo.blockSignals(False)
+        self.select_ai_profile(self.profile_combo.currentIndex())
+
+    def select_ai_profile(self, index):
+        if not self.config_manager or index < 0:
+            self.client = None
+            self.send_button.setEnabled(False)
+            return
+        profile_id = self.profile_combo.itemData(index)
+        if not profile_id:
+            self.client = None
+            self.send_button.setEnabled(False)
+            return
+        profile = next(
+            (
+                item
+                for item in self.config_manager.get("ai_profiles", [])
+                if item.get("id") == profile_id
+            ),
+            None,
+        )
+        if not profile:
+            self.client = None
             self.send_button.setEnabled(False)
             return
         try:
-            self.client = genai.Client(api_key=api_key)
-        except Exception as e:
-            msg_box = QMessageBox(None)
-            msg_box.setIcon(QMessageBox.Warning)
-            msg_box.setWindowTitle("Connection Error")
-            msg_box.setText(f"Failed to initialize the AI client:\n{e}")
-            msg_box.setWindowIcon(QIcon("resources:/lumos-icon.png"))
-            msg_box.exec_()
+            api_key = _secure_keyring().get_password(
+                AI_CREDENTIAL_SERVICE, profile_id
+            )
+            if not api_key:
+                raise ValueError("The API key is missing from the system credential store.")
+            self.client = OpenAI(
+                api_key=api_key,
+                base_url=profile.get("base_url") or None,
+            )
+            self.model = profile["model"]
+            self.config_manager.set("active_ai_profile", profile_id)
+            self.send_button.setEnabled(True)
+        except Exception:
+            logger.exception("Could not initialize the selected AI profile")
+            self.client = None
             self.send_button.setEnabled(False)
+            QMessageBox.warning(
+                self,
+                "AI Profile Unavailable",
+                "Could not load this profile's API key from the system credential store.",
+            )
+
+    def manage_ai_profiles(self):
+        dialog = AIProfileDialog(self.config_manager, self)
+        dialog.profiles_changed.connect(self.setup_ai)
+        dialog.exec_()
+
+    def generate_commit_message(self, staged_diff):
+        if (
+            not self.client
+            or not self.model
+            or (self.worker and self.worker.isRunning())
+        ):
+            return False
+        self._commit_generation_text = ""
+        self.send_button.setEnabled(False)
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "Write one concise Git commit message for the staged diff. "
+                    "Use an imperative subject line, optionally with a conventional "
+                    "commit type. Output only the message, with no markdown fences."
+                ),
+            },
+            {"role": "user", "content": staged_diff},
+        ]
+        self.worker = AIResponseWorker(self.client, messages, self.model)
+        self.worker.chunk_received.connect(self._capture_commit_message)
+        self.worker.finished_streaming.connect(self._finish_commit_message)
+        self.worker.error_occurred.connect(self._fail_commit_message)
+        self.worker.start()
+        return True
+
+    def _capture_commit_message(self, text):
+        self._commit_generation_text = text
+
+    def _finish_commit_message(self):
+        message = self._commit_generation_text.strip()
+        self.send_button.setEnabled(True)
+        if self.worker:
+            self.worker.quit()
+            self.worker.wait()
+            self.worker = None
+        if message:
+            self.commit_message_generated.emit(message)
+        else:
+            self.commit_message_failed.emit("The AI returned an empty commit message.")
+
+    def _fail_commit_message(self, error):
+        self.send_button.setEnabled(True)
+        if self.worker:
+            self.worker.quit()
+            self.worker.wait()
+            self.worker = None
+        self.commit_message_failed.emit(error)
 
     def scroll_to_bottom(self):
         try:
@@ -702,13 +965,17 @@ class AIChat(QWidget):
     def _serialize_conversation(self):
         msgs = []
         for m in self.conversation_history:
-            role = getattr(m, "role", "")
-            text = ""
-            parts = getattr(m, "parts", [])
-            if parts:
-                text = getattr(parts[0], "text", "") or ""
-            if role in ("user", "model") and text:
-                msgs.append({"role": role, "text": text})
+            role = m.get("role", "")
+            text = m.get("content", "")
+            if role == "model":
+                role = "assistant"
+            if role in ("user", "assistant") and text:
+                msgs.append(
+                    {
+                        "role": "model" if role == "assistant" else role,
+                        "text": text,
+                    }
+                )
         if self.current_ai_message_widget and self.current_ai_message_widget.raw_text:
             if not msgs or msgs[-1]["role"] != "model":
                 msgs.append(
@@ -806,15 +1073,11 @@ class AIChat(QWidget):
             text = msg.get("text", "")
             if role == "user":
                 self.add_user_message_widget(text)
-                user_part = types.Part(text=text)
-                self.conversation_history.append(
-                    types.Content(role="user", parts=[user_part])
-                )
-            elif role == "model":
+                self.conversation_history.append({"role": "user", "content": text})
+            elif role in ("model", "assistant"):
                 self.add_ai_message_widget_static(text)
-                model_part = types.Part(text=text)
                 self.conversation_history.append(
-                    types.Content(role="model", parts=[model_part])
+                    {"role": "assistant", "content": text}
                 )
         self.refresh_session_menu()
         self.scroll_to_bottom()
@@ -847,15 +1110,11 @@ class AIChat(QWidget):
             text = msg.get("text", "")
             if role == "user":
                 self.add_user_message_widget(text)
-                user_part = types.Part(text=text)
-                self.conversation_history.append(
-                    types.Content(role="user", parts=[user_part])
-                )
-            elif role == "model":
+                self.conversation_history.append({"role": "user", "content": text})
+            elif role in ("model", "assistant"):
                 self.add_ai_message_widget_static(text)
-                model_part = types.Part(text=text)
                 self.conversation_history.append(
-                    types.Content(role="model", parts=[model_part])
+                    {"role": "assistant", "content": text}
                 )
         self.refresh_session_menu()
         self.scroll_to_bottom()
@@ -893,9 +1152,7 @@ class AIChat(QWidget):
         self.input_text.clear()
         self.send_button.setEnabled(False)
         self.create_and_add_ai_message_widget()
-        user_part = types.Part(text=user_message)
-        current_user_content = types.Content(role="user", parts=[user_part])
-        self.conversation_history.append(current_user_content)
+        self.conversation_history.append({"role": "user", "content": user_message})
         self.contents = list(self.conversation_history)
         context_str = "\n- ".join(context_content) if context_content else " None"
         system_instruction = f"""
@@ -906,7 +1163,7 @@ PRIMARY OBJECTIVE
 - Deliver the most correct, minimal, production-safe fix possible.
 - Perform deep multi-phase root-cause analysis before touching any code.
 - Self-verify every fix for correctness, regressions, and edge cases.
-- Use web search when knowledge may be outdated, version-specific, or unverifiable from context alone.
+- State when information needs verification from external documentation.
 - Ask the user targeted clarifying questions when critical information is absent or ambiguous.
 
 NON-NEGOTIABLE PRIORITIES
@@ -1233,24 +1490,17 @@ Do not ignore it.
 Resolve any conflict between context and inference in favor of the context.
 """
 
-        model = "gemini-2.5-flash"
         logger.info(
             "Submitting AI request: model=%s, conversation_items=%d, context_files=%d",
-            model,
+            self.model,
             len(self.conversation_history),
             len(context_files),
         )
-        tools = [types.Tool(google_search=types.GoogleSearch())]
-        generate_content_config = types.GenerateContentConfig(
-            system_instruction=types.Part.from_text(text=system_instruction),
-            thinking_config=types.ThinkingConfig(
-                thinking_budget=-1,
-            ),
-            tools=tools,
-        )
-        self.worker = GeminiWorker(
-            self.client, self.contents, model, generate_content_config
-        )
+        messages = [
+            {"role": "system", "content": system_instruction},
+            *self.contents,
+        ]
+        self.worker = AIResponseWorker(self.client, messages, self.model)
         self.worker.chunk_received.connect(self.update_ai_message)
         self.worker.finished_streaming.connect(self.finalize_ai_message)
         self.worker.error_occurred.connect(self.handle_ai_error)

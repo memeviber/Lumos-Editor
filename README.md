@@ -54,9 +54,11 @@ Whether you're editing source code, managing a project, or extending the editor 
 
 - **Source Control Integration:** Manage Git repositories through a dedicated source control panel.
 - **Integrated Terminal:** Execute shell commands without leaving the editor.
-- **AI Chat Assistant:** Get coding assistance, generate code, and ask programming questions through an integrated Gemini-powered chat assistant.
+- **AI Chat Assistant:** Get coding assistance, generate code, and ask programming questions through an integrated chat panel that supports OpenAI and OpenAI-compatible APIs.
 - **RunX File Runner:** Run supported files in the integrated terminal or open HTML documents in your default browser.
 - **Media Viewer:** Open common image, audio, and video formats directly in the editor.
+
+AI Chat is available in a resizable panel on the right. Configure multiple named AI profiles with a model and API endpoint; API keys are stored in the operating system's credential store, not in Lumos's JSON settings. Source Control is available from the **GIT** tab in the left panel. Its **AI Commit** action asks before sending the staged diff to the selected provider, then generates a message for review before committing.
 
 ### Customization and Extensibility
 

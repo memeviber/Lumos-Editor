@@ -19,6 +19,8 @@ class ConfigManager:
             "last_session": {},
             "last_session_id": None,
             "AI_sessions": [],
+            "ai_profiles": [],
+            "active_ai_profile": None,
             "plugins_enabled": True,
             "individual_plugins": {},
             "recent_files": [],

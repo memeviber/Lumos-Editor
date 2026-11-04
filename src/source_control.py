@@ -58,6 +58,7 @@ class SourceControlTab(QWidget):
         self.repo = None
         self.poller = None
         self._git_busy = False
+        self._connected_ai_widget = None
         self.setup_ui()
         self.initialize_git()
 
@@ -108,6 +109,10 @@ class SourceControlTab(QWidget):
         self.commit_button.setFixedHeight(32)
         self.commit_button.setObjectName("primaryButton")
         actions_layout.addWidget(self.commit_button)
+        self.ai_commit_button = QPushButton("AI Commit")
+        self.ai_commit_button.clicked.connect(self.generate_ai_commit_message)
+        self.ai_commit_button.setFixedHeight(32)
+        actions_layout.addWidget(self.ai_commit_button)
         self.push_button = QPushButton("Push")
         self.push_button.clicked.connect(self.push_changes)
         self.push_button.setFixedHeight(32)
@@ -344,12 +349,14 @@ class SourceControlTab(QWidget):
             item.setData(0, Qt.UserRole, {"type": "info"})
             self.changes_tree.addTopLevelItem(item)
             self.commit_button.setEnabled(False)
+            self.ai_commit_button.setEnabled(False)
             self.push_button.setEnabled(False)
             self.pull_button.setEnabled(False)
             self.branch_btn.setEnabled(False)
             return
         try:
             self.branch_btn.setEnabled(True)
+            self.ai_commit_button.setEnabled(True)
             branch = self.repo.active_branch.name
             self.branch_btn.setText(f"Branch: {branch}")
             self.changes_tree.clear()
@@ -622,19 +629,89 @@ class SourceControlTab(QWidget):
             self.main_window, "Commit Changes", "Enter commit message:", ""
         )
         if ok and message.strip():
-            logger.info("Creating Git commit")
-            self._git_busy = True
-            self.show_progress(True)
-            try:
-                self.repo.index.commit(message.strip())
-                self.branch_btn.setText(f"Branch: {self.repo.active_branch.name}")
-            except Exception as e:
-                logger.exception("Git commit failed")
-                QMessageBox.warning(self.main_window, "Commit Failed", str(e))
-            finally:
-                self.show_progress(False)
-                self._git_busy = False
-                self.update_git_status()
+            self._commit_with_message(message.strip())
+
+    def generate_ai_commit_message(self):
+        if not self.repo or self._git_busy:
+            return
+        staged_diff = self.repo.git.diff("--cached", "--no-ext-diff")
+        if not staged_diff.strip():
+            QMessageBox.information(
+                self.main_window,
+                "AI Commit Message",
+                "Stage changes first. The AI generates a message from staged changes only.",
+            )
+            return
+        diff_limit_notice = (
+            "\nOnly the first 30,000 characters will be sent."
+            if len(staged_diff) > 30000
+            else ""
+        )
+        reply = QMessageBox.question(
+            self.main_window,
+            "Send Staged Changes to AI?",
+            "The staged diff will be sent to your selected AI provider to generate a commit message."
+            f"{diff_limit_notice}\nContinue?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+        ai_chat = self.main_window.show_ai_chat()
+        if ai_chat is None:
+            return
+        if self._connected_ai_widget is not ai_chat:
+            ai_chat.commit_message_generated.connect(self._on_ai_commit_message)
+            ai_chat.commit_message_failed.connect(self._on_ai_commit_message_failed)
+            self._connected_ai_widget = ai_chat
+        if not ai_chat.generate_commit_message(staged_diff[:30000]):
+            QMessageBox.information(
+                self.main_window,
+                "AI Commit Message",
+                "Configure an AI profile in the AI panel, then try again.",
+            )
+            return
+        self._git_busy = True
+        self.ai_commit_button.setEnabled(False)
+        self.show_progress(True)
+
+    def _on_ai_commit_message(self, generated_message):
+        self._git_busy = False
+        self.ai_commit_button.setEnabled(True)
+        self.show_progress(False)
+        message, ok = QInputDialog.getMultiLineText(
+            self.main_window,
+            "Review AI Commit Message",
+            "Edit the message before committing staged changes:",
+            generated_message,
+        )
+        if ok and message.strip():
+            self._commit_with_message(message.strip())
+
+    def _on_ai_commit_message_failed(self, error):
+        self._git_busy = False
+        self.ai_commit_button.setEnabled(True)
+        self.show_progress(False)
+        QMessageBox.warning(
+            self.main_window,
+            "AI Commit Message Failed",
+            error,
+        )
+
+    def _commit_with_message(self, message):
+        logger.info("Creating Git commit")
+        self._git_busy = True
+        self.show_progress(True)
+        try:
+            self.repo.index.commit(message)
+            self.branch_btn.setText(f"Branch: {self.repo.active_branch.name}")
+        except Exception as e:
+            logger.exception("Git commit failed")
+            QMessageBox.warning(self.main_window, "Commit Failed", str(e))
+        finally:
+            self.show_progress(False)
+            self._git_busy = False
+            self.update_git_status()
 
     def push_changes(self):
         if not self.repo:

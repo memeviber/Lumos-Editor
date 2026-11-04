@@ -617,25 +617,38 @@ class MainWindow(QWidget):
             f"background: {theme.color2}; border-bottom: 1px solid {theme.color1};"
         )
         header_layout = QHBoxLayout(explorer_header)
-        header_layout.setContentsMargins(10, 0, 4, 0)
-        header_layout.setSpacing(10)
+        header_layout.setContentsMargins(4, 0, 4, 0)
+        header_layout.setSpacing(3)
         tab_style = f"""
             QPushButton {{
-                color: {theme.color23}; font-size: 11px; font-weight: bold;
-                letter-spacing: 0.5px; background: transparent; border: none; padding: 4px;
+                color: {theme.color23}; font-size: 9px; font-weight: bold;
+                letter-spacing: 0.2px; background: transparent; border: none; padding: 2px;
             }}
             QPushButton:hover {{ color: {theme.color27}; }}
             QPushButton:checked {{ color: {theme.color31}; border-bottom: 2px solid {theme.color38}; }}
         """
-        self.btn_nav_explorer = QPushButton("EXPLORER")
+        self.btn_nav_explorer = QPushButton("E")
         self.btn_nav_explorer.setCheckable(True)
         self.btn_nav_explorer.setChecked(True)
         self.btn_nav_explorer.setStyleSheet(tab_style)
-        self.btn_nav_search = QPushButton("SEARCH")
+        self.btn_nav_explorer.setToolTip("Explorer")
+        self.btn_nav_explorer.setAccessibleName("Explorer")
+        self.btn_nav_explorer.setFixedWidth(24)
+        self.btn_nav_search = QPushButton("S")
         self.btn_nav_search.setCheckable(True)
         self.btn_nav_search.setStyleSheet(tab_style)
+        self.btn_nav_search.setToolTip("Search")
+        self.btn_nav_search.setAccessibleName("Search")
+        self.btn_nav_search.setFixedWidth(24)
+        self.btn_nav_source = QPushButton("G")
+        self.btn_nav_source.setCheckable(True)
+        self.btn_nav_source.setStyleSheet(tab_style)
+        self.btn_nav_source.setToolTip("Source Control")
+        self.btn_nav_source.setAccessibleName("Source Control")
+        self.btn_nav_source.setFixedWidth(24)
         header_layout.addWidget(self.btn_nav_explorer)
         header_layout.addWidget(self.btn_nav_search)
+        header_layout.addWidget(self.btn_nav_source)
         header_layout.addStretch()
         self.toggle_tree = QPushButton()
         self.toggle_tree.setIcon(QIcon("resources:/close-icon.png"))
@@ -766,6 +779,34 @@ class MainWindow(QWidget):
         self.terminal_overlay.hide()
         self.terminal_overlay.closed.connect(self.hide_integrated_terminal)
         self.right_splitter.addWidget(self.terminal_overlay)
+        self.content_splitter = QSplitter(Qt.Horizontal)
+        self.content_splitter.setHandleWidth(3)
+        self.content_splitter.setChildrenCollapsible(False)
+        self.content_splitter.addWidget(self.right_splitter)
+        self.ai_panel = QWidget()
+        self.ai_panel.setMinimumWidth(300)
+        self.ai_panel_layout = QVBoxLayout(self.ai_panel)
+        self.ai_panel_layout.setContentsMargins(0, 0, 0, 0)
+        self.ai_panel_layout.setSpacing(0)
+        ai_panel_header = QWidget()
+        ai_panel_header_layout = QHBoxLayout(ai_panel_header)
+        ai_panel_header_layout.setContentsMargins(10, 4, 4, 4)
+        ai_panel_title = QLabel("AI CHAT")
+        ai_panel_title.setStyleSheet(
+            f"color: {theme.color23}; font-size: 11px; font-weight: bold;"
+        )
+        ai_panel_header_layout.addWidget(ai_panel_title)
+        ai_panel_header_layout.addStretch()
+        self.ai_panel_close_button = QPushButton()
+        self.ai_panel_close_button.setIcon(QIcon("resources:/close-icon.png"))
+        self.ai_panel_close_button.setFixedSize(24, 24)
+        self.ai_panel_close_button.clicked.connect(self.hide_ai_chat)
+        ai_panel_header_layout.addWidget(self.ai_panel_close_button)
+        self.ai_panel_layout.addWidget(ai_panel_header)
+        self.ai_chat_widget = None
+        self.content_splitter.addWidget(self.ai_panel)
+        self.ai_panel.hide()
+        splitter.addWidget(self.content_splitter)
         self.splitter = splitter
         configured_tree_width = self.config_manager.get("explorer_width")
         self.tree_width = (
@@ -839,8 +880,10 @@ class MainWindow(QWidget):
         self.left_stack.addWidget(self.file_tree)
         self.setup_search_panel()
         self.left_stack.addWidget(self.search_panel)
+        self.source_control_widget = None
         self.btn_nav_explorer.clicked.connect(lambda: self.switch_left_panel(0))
         self.btn_nav_search.clicked.connect(lambda: self.switch_left_panel(1))
+        self.btn_nav_source.clicked.connect(self.show_source_control)
         self.file_tree.setStyleSheet(
             f"""
             QTreeView {{
@@ -1291,6 +1334,9 @@ class MainWindow(QWidget):
 
     def save_session(self):
         sizes = self.splitter.sizes()
+        content_sizes = self.content_splitter.sizes()
+        if self.ai_panel.isVisible() and len(content_sizes) == 2 and content_sizes[1] > 0:
+            self.config_manager.set("ai_panel_width", content_sizes[1])
         explorer_width = (
             sizes[0]
             if self.left_container.isVisible() and sizes[0] > 0
@@ -1308,6 +1354,7 @@ class MainWindow(QWidget):
             "geometry": self.saveGeometry().toBase64().data().decode("utf-8"),
             "splitter": self.splitter.saveState().toBase64().data().decode("utf-8"),
             "explorer_width": explorer_width,
+            "ai_panel_visible": self.ai_panel.isVisible(),
             "project_dir": self.current_project_dir,
             "tabs": [],
             "active_tab_index": self.tabs.currentIndex(),
@@ -1367,6 +1414,8 @@ class MainWindow(QWidget):
             )
         if session_state.get("project_dir"):
             self.load_folder(session_state["project_dir"])
+        if session_state.get("ai_panel_visible", False):
+            self.show_ai_chat()
         tabs_state = session_state.get("tabs", [])
         if tabs_state:
             for tab_info in tabs_state:
@@ -1935,14 +1984,30 @@ class MainWindow(QWidget):
             pass
 
     def show_ai_chat(self):
-        for i in range(self.tabs.count()):
-            if isinstance(self.tabs.widget(i), AIChat):
-                self.tabs.setCurrentIndex(i)
-                return
-        ai_chat_tab = AIChat(self)
-        self.tabs.addTab(ai_chat_tab, "AI Chat")
-        self.tabs.setCurrentWidget(ai_chat_tab)
-        ai_chat_tab.input_text.setFocus()
+        if self.ai_chat_widget is None:
+            self.ai_chat_widget = AIChat(self)
+            self.ai_panel_layout.addWidget(self.ai_chat_widget)
+        self.ai_panel.show()
+        available_width = sum(self.content_splitter.sizes())
+        configured_width = self.config_manager.get("ai_panel_width", 360)
+        ai_width = max(300, configured_width if isinstance(configured_width, int) else 360)
+        self.content_splitter.setSizes(
+            [max(400, available_width - ai_width), ai_width]
+        )
+        self.ai_chat_widget.input_text.setFocus()
+        return self.ai_chat_widget
+
+    def hide_ai_chat(self):
+        sizes = self.content_splitter.sizes()
+        if len(sizes) == 2 and sizes[1] > 0:
+            self.config_manager.set("ai_panel_width", sizes[1])
+        self.ai_panel.hide()
+        self.content_splitter.setSizes([max(400, sum(sizes)), 0])
+
+    def get_ai_chat_widget(self):
+        if self.ai_chat_widget is None:
+            return self.show_ai_chat()
+        return self.ai_chat_widget
 
     def toggle_wrap_mode(self):
         self.wrap_mode = not self.wrap_mode
@@ -2199,8 +2264,6 @@ class MainWindow(QWidget):
                 ImageViewer,
                 AudioViewer,
                 VideoViewer,
-                AIChat,
-                SourceControlTab,
             ),
         ):
             logger.debug("Save ignored for a non-editor tab")
@@ -2295,8 +2358,6 @@ class MainWindow(QWidget):
                 ImageViewer,
                 AudioViewer,
                 VideoViewer,
-                AIChat,
-                SourceControlTab,
             ),
         ):
             return
@@ -2331,11 +2392,6 @@ class MainWindow(QWidget):
         else:
             tabs_to_check.append(tab_to_close)
         for tab in tabs_to_check:
-            if isinstance(tab, AIChat):
-                tab._save_current_session()
-                if getattr(tab, "worker", None) and tab.worker.isRunning():
-                    tab.worker.quit()
-                    tab.worker.wait()
             if hasattr(tab, "stop_analysis_loop"):
                 tab.stop_analysis_loop()
             if hasattr(tab, "is_modified") and tab.is_modified:
@@ -2453,6 +2509,13 @@ class MainWindow(QWidget):
                 if is_restarting:
                     QApplication.instance().setProperty("restart_requested", False)
                 return
+        if self.ai_chat_widget:
+            self.ai_chat_widget._save_current_session()
+            if self.ai_chat_widget.worker and self.ai_chat_widget.worker.isRunning():
+                self.ai_chat_widget.worker.quit()
+                self.ai_chat_widget.worker.wait()
+        if self.source_control_widget:
+            self.source_control_widget.stop_poller()
         event.accept()
 
     def show_context_menu(self, position):
@@ -2865,8 +2928,6 @@ class MainWindow(QWidget):
                 ImageViewer,
                 AudioViewer,
                 VideoViewer,
-                SourceControlTab,
-                AIChat,
             ),
         ):
             status_map = {
@@ -2874,8 +2935,6 @@ class MainWindow(QWidget):
                 "ImageViewer": "Image Viewer",
                 "AudioViewer": "Audio Viewer",
                 "VideoViewer": "Video Viewer",
-                "SourceControlTab": "Source Control",
-                "AIChat": "AI Chat",
             }
             status_message = status_map.get(type(tab).__name__, "Ready")
             self.show_status_message(status_message)
@@ -2951,14 +3010,9 @@ class MainWindow(QWidget):
                 "Please open a folder first to use Source Control.",
             )
             return
-        for i in range(self.tabs.count()):
-            if isinstance(self.tabs.widget(i), SourceControlTab):
-                self.tabs.setCurrentIndex(i)
-                return
-        source_control_tab = SourceControlTab(self)
-        self.project_dir_changed.connect(source_control_tab.on_project_changed)
-        self.tabs.addTab(source_control_tab, "Source Control")
-        self.tabs.setCurrentWidget(source_control_tab)
+        if not self.left_container.isVisible():
+            self.show_left_panel_logic()
+        self.switch_left_panel(2)
 
     def show_command_palette(self):
         commands = []
@@ -3180,10 +3234,26 @@ class MainWindow(QWidget):
         return True
 
     def switch_left_panel(self, index):
+        if index == 2:
+            if not self.current_project_dir:
+                QMessageBox.information(
+                    self,
+                    "Source Control",
+                    "Please open a folder first to use Source Control.",
+                )
+                self.btn_nav_explorer.setChecked(True)
+                return
+            if self.source_control_widget is None:
+                self.source_control_widget = SourceControlTab(self)
+                self.project_dir_changed.connect(
+                    self.source_control_widget.on_project_changed
+                )
+                self.left_stack.addWidget(self.source_control_widget)
         self.btn_nav_explorer.setChecked(index == 0)
         self.btn_nav_search.setChecked(index == 1)
+        self.btn_nav_source.setChecked(index == 2)
         self.left_stack.setCurrentIndex(index)
-        self.folder_section.setVisible(index == 0)
+        self.folder_section.setVisible(index in (0, 2))
         if index == 1:
             self.search_proj_input.setFocus()
 
