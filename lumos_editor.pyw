@@ -3588,24 +3588,6 @@ def main():
     try:
         lock_directory.mkdir(parents=True, exist_ok=True)
         instance_lock = QLockFile(str(lock_directory / "instance.lock"))
-        if not instance_lock.tryLock(0):
-            if instance_lock.error() != QLockFile.LockFailedError:
-                logger.error(
-                    "Could not acquire the application instance lock: %s",
-                    instance_lock.error(),
-                )
-                QMessageBox.warning(
-                    None,
-                    "Startup Failed",
-                    "Lumos could not secure its application lock. The editor will not start.",
-                )
-                return 1
-            QMessageBox.warning(
-                None,
-                "Lumos Editor Already Running",
-                "Another Lumos Editor window is already open.",
-            )
-            return 1
     except OSError:
         logger.exception("Could not create the application instance lock")
         QMessageBox.warning(
@@ -3615,6 +3597,7 @@ def main():
         )
         return 1
 
+    instance_lock_acquired = False
     try:
         while app.property("restart_requested"):
             app.setProperty("restart_requested", False)
@@ -3624,6 +3607,26 @@ def main():
                 theme.reload_theme()
             except Exception:
                 logger.exception("Could not load theme at startup")
+            if not instance_lock_acquired:
+                if not instance_lock.tryLock(0):
+                    if instance_lock.error() != QLockFile.LockFailedError:
+                        logger.error(
+                            "Could not acquire the application instance lock: %s",
+                            instance_lock.error(),
+                        )
+                        QMessageBox.warning(
+                            None,
+                            "Startup Failed",
+                            "Lumos could not secure its application lock. The editor will not start.",
+                        )
+                        return 1
+                    QMessageBox.warning(
+                        None,
+                        "Lumos Editor Already Running",
+                        "Another Lumos Editor window is already open.",
+                    )
+                    return 1
+                instance_lock_acquired = True
             tooltip_palette = app.palette()
             tooltip_palette.setColor(QPalette.ToolTipBase, QColor(theme.color2))
             tooltip_palette.setColor(QPalette.ToolTipText, QColor(theme.color27))
@@ -3645,7 +3648,8 @@ def main():
             if not app.property("restart_requested"):
                 return exit_code
     finally:
-        instance_lock.unlock()
+        if instance_lock_acquired:
+            instance_lock.unlock()
 
 
 if __name__ == "__main__":

@@ -4,9 +4,7 @@ mistune==3.1.3
 jedi==0.19.2
 gitpython==3.1.40
 openai==2.29.0
-keyring==25.6.0; sys_platform == 'win32'
-keyring[secretstorage]==25.6.0; sys_platform == 'linux'
-keyring==25.6.0; sys_platform == 'darwin'
+keyring==25.6.0
 Pygments==2.19.2
 pywinpty==3.0.3; sys_platform == 'win32'
 pyte==0.8.2
