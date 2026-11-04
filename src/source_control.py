@@ -435,6 +435,7 @@ class SourceControlTab(QWidget):
             has_changes = staged_count > 0 or modified_count > 0 or untracked_count > 0
             commits_ahead = 0
             commits_behind = 0
+            tracking_branch = None
             try:
                 tracking_branch = (
                     self.repo.active_branch.tracking_branch()
@@ -456,11 +457,14 @@ class SourceControlTab(QWidget):
                     )
             except Exception:
                 logger.exception("Could not determine remote branch status")
-            if self._post_commit_action is None:
-                if commits_ahead:
-                    self._post_commit_action = "push"
-                elif commits_behind:
-                    self._post_commit_action = "pull"
+            if is_detached:
+                self._post_commit_action = None
+            elif commits_ahead:
+                self._post_commit_action = "push"
+            elif commits_behind:
+                self._post_commit_action = "pull"
+            elif tracking_branch or self._post_commit_action != "push":
+                self._post_commit_action = None
             self._update_action_controls(has_changes)
         except Exception as e:
             logger.exception("Could not refresh Git status")
@@ -814,7 +818,7 @@ class SourceControlTab(QWidget):
                     branch.name,
                 )
             pushed = True
-            self._post_commit_action = "pull"
+            self._post_commit_action = None
             self.branch_btn.setText("Changes pushed")
         except Exception as e:
             logger.exception("Git push failed")
@@ -823,8 +827,9 @@ class SourceControlTab(QWidget):
             self.show_progress(False)
             self._git_busy = False
             if pushed:
-                self._update_action_controls(False)
-            QTimer.singleShot(1500, self.update_git_status)
+                self.update_git_status()
+            else:
+                QTimer.singleShot(1500, self.update_git_status)
 
     def pull_changes(self):
         if not self.repo:
