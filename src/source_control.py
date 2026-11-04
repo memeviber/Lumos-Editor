@@ -457,11 +457,9 @@ class SourceControlTab(QWidget):
 
     def _update_action_controls(self, has_changes):
         action = self._post_commit_action
-        self.commit_actions_widget.show()
-        self.commit_message_input.show()
-        self.commit_button.setEnabled(has_changes)
-        self.ai_commit_button.setEnabled(has_changes)
         if action in {"push", "pull"} and not has_changes:
+            self.commit_message_input.hide()
+            self.commit_actions_widget.hide()
             self.sync_button.setText("Push" if action == "push" else "Pull")
             self.sync_button.setToolTip(
                 "Send your commit to the remote repository"
@@ -476,6 +474,10 @@ class SourceControlTab(QWidget):
                 )
             return
         self.sync_button.hide()
+        self.commit_message_input.show()
+        self.commit_actions_widget.show()
+        self.commit_button.setEnabled(has_changes)
+        self.ai_commit_button.setEnabled(has_changes)
         if not has_changes:
             self.commit_button.setEnabled(False)
             self.ai_commit_button.setEnabled(False)
