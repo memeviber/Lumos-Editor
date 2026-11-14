@@ -229,7 +229,12 @@ class ThemedDialogTitleBar(QWidget):
                 border-radius: 4px;
             }}
             QToolButton#ThemedDialogCloseButton:hover {{
-                background: {theme.color9};
+                background: #e81123;
+                color: #ffffff;
+            }}
+            QToolButton#ThemedDialogCloseButton:pressed {{
+                background: #bf0f1d;
+                color: #ffffff;
             }}
             """
         )

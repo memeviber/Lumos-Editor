@@ -691,9 +691,24 @@ class AIChat(QWidget):
                 border-color: {theme.color38};
                 color: white;
             }}
+            QWidget#AIChat QPushButton#newChatButton,
             QWidget#AIChat QPushButton#addContextButton,
             QWidget#AIChat QPushButton#clearContextButton {{
-                padding: 0;
+                background-color: transparent;
+                border: none;
+                border-radius: 4px;
+                padding: 4px;
+            }}
+            QWidget#AIChat QPushButton#newChatButton:hover,
+            QWidget#AIChat QPushButton#addContextButton:hover,
+            QWidget#AIChat QPushButton#clearContextButton:hover {{
+                background-color: {theme.color9};
+                border: none;
+            }}
+            QWidget#AIChat QPushButton#newChatButton:pressed,
+            QWidget#AIChat QPushButton#addContextButton:pressed,
+            QWidget#AIChat QPushButton#clearContextButton:pressed {{
+                background-color: {theme.color12};
             }}
             QWidget#AIChat QPushButton#sendButton:hover {{
                 background-color: {theme.color37};
@@ -857,12 +872,12 @@ class AIChat(QWidget):
         context_header.addWidget(context_label)
         context_actions = QHBoxLayout()
         context_actions.setContentsMargins(0, 0, 0, 0)
-        context_actions.setSpacing(6)
+        context_actions.setSpacing(0)
         self.add_context_button = QPushButton()
         self.add_context_button.setObjectName("addContextButton")
         self.add_context_button.setIcon(QIcon("resources:/plus-icon.png"))
-        self.add_context_button.setIconSize(QSize(16, 16))
-        self.add_context_button.setFixedSize(38, 28)
+        self.add_context_button.setIconSize(QSize(18, 18))
+        self.add_context_button.setFixedSize(30, 30)
         self.add_context_button.setToolTip("Add files for the AI to use as context")
         self.add_context_button.setAccessibleName("Add context files")
         self.add_context_button.clicked.connect(self.add_context_files)
@@ -870,8 +885,8 @@ class AIChat(QWidget):
         self.clear_context_button = QPushButton()
         self.clear_context_button.setObjectName("clearContextButton")
         self.clear_context_button.setIcon(QIcon("resources:/trash-icon.png"))
-        self.clear_context_button.setIconSize(QSize(16, 16))
-        self.clear_context_button.setFixedSize(38, 28)
+        self.clear_context_button.setIconSize(QSize(18, 18))
+        self.clear_context_button.setFixedSize(30, 30)
         self.clear_context_button.setToolTip("Remove all context files from this chat")
         self.clear_context_button.setAccessibleName("Clear context files")
         self.clear_context_button.clicked.connect(self.clear_context_files)
@@ -932,13 +947,9 @@ class AIChat(QWidget):
         main_layout.addWidget(input_container)
         self.send_button.clicked.connect(self.send_message)
         for widget in (
-            self.search_box,
             self.session_button,
-            self.new_button,
             self.profile_combo,
             self.profile_button,
-            self.add_context_button,
-            self.clear_context_button,
             self.context_files_list,
             self.send_button,
         ):

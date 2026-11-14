@@ -808,13 +808,12 @@ class MainWindow(QWidget):
             }}
             QPushButton#AIChatPanelClose {{
                 background: transparent;
-                border: 1px solid transparent;
+                border: none;
                 border-radius: 4px;
                 padding: 4px;
             }}
             QPushButton#AIChatPanelClose:hover {{
                 background: {theme.color9};
-                border-color: {theme.color13};
             }}
             QPushButton#AIChatPanelClose:pressed {{
                 background: {theme.color12};
