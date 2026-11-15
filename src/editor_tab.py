@@ -577,9 +577,7 @@ class MiniMap(QWidget):
             line_delta = round(
                 (event.pos().y() - self._drag_start_y) * max_first / travel
             )
-            target_first = max(
-                0, min(max_first, self._drag_start_line + line_delta)
-            )
+            target_first = max(0, min(max_first, self._drag_start_line + line_delta))
             value = (
                 int(round(target_first * self.HIGH_RANGE / max_first))
                 if max_first

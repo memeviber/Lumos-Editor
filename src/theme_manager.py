@@ -254,7 +254,9 @@ class LumosThemeManager:
                     )
                 renderer = QSvgRenderer(QByteArray(svg_data.encode("utf-8")))
                 if not renderer.isValid():
-                    logger.error("Could not render SVG icon template: %s", template_path)
+                    logger.error(
+                        "Could not render SVG icon template: %s", template_path
+                    )
                     continue
                 pixmap = QPixmap(24, 24)
                 pixmap.fill(Qt.transparent)

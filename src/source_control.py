@@ -445,15 +445,11 @@ class SourceControlTab(QWidget):
                 if tracking_branch:
                     commits_ahead = sum(
                         1
-                        for _ in self.repo.iter_commits(
-                            f"{tracking_branch.name}..HEAD"
-                        )
+                        for _ in self.repo.iter_commits(f"{tracking_branch.name}..HEAD")
                     )
                     commits_behind = sum(
                         1
-                        for _ in self.repo.iter_commits(
-                            f"HEAD..{tracking_branch.name}"
-                        )
+                        for _ in self.repo.iter_commits(f"HEAD..{tracking_branch.name}")
                     )
             except Exception:
                 logger.exception("Could not determine remote branch status")
@@ -758,9 +754,7 @@ class SourceControlTab(QWidget):
         try:
             self.repo.index.commit(message)
             committed = True
-            self._post_commit_action = (
-                None if self.repo.head.is_detached else "push"
-            )
+            self._post_commit_action = None if self.repo.head.is_detached else "push"
             self.commit_message_input.clear()
             if not self.repo.head.is_detached:
                 branch = self.repo.active_branch.name

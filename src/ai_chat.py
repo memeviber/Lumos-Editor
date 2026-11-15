@@ -68,7 +68,9 @@ def _secure_keyring():
     else:
         is_secure_backend = False
     if not is_secure_backend:
-        raise RuntimeError("No supported operating-system credential store is available.")
+        raise RuntimeError(
+            "No supported operating-system credential store is available."
+        )
     return keyring
 
 
@@ -376,7 +378,9 @@ class AIProfileDialog(ThemedBaseDialog):
                 else ""
             )
         except Exception:
-            logger.exception("Could not read AI API key from the system credential store")
+            logger.exception(
+                "Could not read AI API key from the system credential store"
+            )
             self.api_key_input.clear()
         self.delete_button.setEnabled(bool(profile_id))
 
@@ -400,9 +404,7 @@ class AIProfileDialog(ThemedBaseDialog):
             "model": model,
         }
         try:
-            _secure_keyring().set_password(
-                AI_CREDENTIAL_SERVICE, profile_id, api_key
-            )
+            _secure_keyring().set_password(AI_CREDENTIAL_SERVICE, profile_id, api_key)
             self.profiles = [p for p in self.profiles if p.get("id") != profile_id]
             self.profiles.append(profile)
             self.config_manager.set("ai_profiles", self.profiles)
@@ -429,7 +431,10 @@ class AIProfileDialog(ThemedBaseDialog):
             return
         try:
             credential_store = _secure_keyring()
-            if credential_store.get_password(AI_CREDENTIAL_SERVICE, profile_id) is not None:
+            if (
+                credential_store.get_password(AI_CREDENTIAL_SERVICE, profile_id)
+                is not None
+            ):
                 credential_store.delete_password(AI_CREDENTIAL_SERVICE, profile_id)
         except Exception:
             logger.exception("Could not delete AI profile credential")
@@ -917,9 +922,7 @@ class AIChat(QWidget):
         input_layout.setContentsMargins(0, 0, 0, 0)
         input_layout.setSpacing(6)
         self.input_text = ChatInput()
-        self.input_text.setPlaceholderText(
-            "Message the AI... (Ctrl+Enter to send)"
-        )
+        self.input_text.setPlaceholderText("Message the AI... (Ctrl+Enter to send)")
         self.input_text.setAccessibleName("Message for the AI assistant")
         self.input_text.setStyleSheet(
             themed_input_stylesheet("QTextEdit", padding="4px 6px")
@@ -1148,7 +1151,9 @@ class AIChat(QWidget):
             self.profile_combo.addItem("No AI profile", "")
         else:
             for profile in profiles:
-                self.profile_combo.addItem(profile.get("name", "AI profile"), profile["id"])
+                self.profile_combo.addItem(
+                    profile.get("name", "AI profile"), profile["id"]
+                )
             selected_index = self.profile_combo.findData(selected_id)
             self.profile_combo.setCurrentIndex(max(0, selected_index))
         self.profile_combo.blockSignals(False)
@@ -1177,11 +1182,11 @@ class AIChat(QWidget):
             self.send_button.setEnabled(False)
             return
         try:
-            api_key = _secure_keyring().get_password(
-                AI_CREDENTIAL_SERVICE, profile_id
-            )
+            api_key = _secure_keyring().get_password(AI_CREDENTIAL_SERVICE, profile_id)
             if not api_key:
-                raise ValueError("The API key is missing from the system credential store.")
+                raise ValueError(
+                    "The API key is missing from the system credential store."
+                )
             self.client = OpenAI(
                 api_key=api_key,
                 base_url=profile.get("base_url") or None,
@@ -1457,9 +1462,7 @@ class AIChat(QWidget):
                 self.conversation_history.append({"role": "user", "content": text})
             elif role in ("model", "assistant"):
                 self.add_ai_message_widget_static(text)
-                self.conversation_history.append(
-                    {"role": "assistant", "content": text}
-                )
+                self.conversation_history.append({"role": "assistant", "content": text})
         self.refresh_session_menu()
         self.scroll_to_bottom()
 
@@ -1494,9 +1497,7 @@ class AIChat(QWidget):
                 self.conversation_history.append({"role": "user", "content": text})
             elif role in ("model", "assistant"):
                 self.add_ai_message_widget_static(text)
-                self.conversation_history.append(
-                    {"role": "assistant", "content": text}
-                )
+                self.conversation_history.append({"role": "assistant", "content": text})
         self.refresh_session_menu()
         self.scroll_to_bottom()
 

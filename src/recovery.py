@@ -89,9 +89,7 @@ def list_recoveries():
     if not RECOVERY_DIR.exists():
         return []
 
-    recovery_ids = {
-        recovery_path.stem for recovery_path in RECOVERY_DIR.glob("*.json")
-    }
+    recovery_ids = {recovery_path.stem for recovery_path in RECOVERY_DIR.glob("*.json")}
     recovery_ids.update(
         backup_path.name[:-9] for backup_path in RECOVERY_DIR.glob("*.json.bak")
     )

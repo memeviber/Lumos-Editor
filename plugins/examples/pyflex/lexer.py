@@ -1,4 +1,6 @@
 import array
+import builtins
+import keyword
 import logging
 
 import jedi
@@ -9,42 +11,91 @@ from tree_sitter import Language, Parser, Query, QueryCursor
 logger = logging.getLogger(__name__)
 PY_LANGUAGE = Language(tspython.language())
 
-PYTHON_QUERY = Query(
-    PY_LANGUAGE,
-    """
-    (comment) @comment
-    (string) @string
-    (integer) @number
-    (float) @number
-    
-    "class" @keyword
-    "def" @keyword
-    "if" @keyword
-    "else" @keyword
-    "elif" @keyword
-    "for" @keyword
-    "while" @keyword
-    "return" @keyword
-    "import" @keyword
-    "from" @keyword
-    "try" @keyword
-    "except" @keyword
-    "pass" @keyword
-    "break" @keyword
-    "continue" @keyword
-    "lambda" @keyword
-    "with" @keyword
-    "as" @keyword
-    "global" @keyword
-    "nonlocal" @keyword
-    "assert" @keyword
-    "del" @keyword
-    "yield" @keyword
-    
-    (class_definition name: (identifier) @class_def)
-    (function_definition name: (identifier) @function_def)
-""",
-)
+
+def _build_python_query():
+    raw_keywords = set(keyword.kwlist) | set(getattr(keyword, "softkwlist", []))
+    raw_keywords -= {"True", "False", "None", "_"}
+
+    valid_keywords = []
+    for kw in sorted(raw_keywords):
+        try:
+            Query(PY_LANGUAGE, f'"{kw}" @keyword')
+            valid_keywords.append(kw)
+        except Exception:
+            pass
+
+    keywords_literal = " ".join(f'"{kw}"' for kw in valid_keywords)
+
+    builtin_classes = []
+    builtin_funcs = []
+    for name in dir(builtins):
+        if name.startswith("_") or not name.isidentifier():
+            continue
+        obj = getattr(builtins, name)
+        if isinstance(obj, type):
+            builtin_classes.append(name)
+        else:
+            builtin_funcs.append(name)
+
+    classes_pattern = "^(" + "|".join(builtin_classes) + ")$"
+    funcs_pattern = "^(" + "|".join(builtin_funcs) + ")$"
+
+    query_parts = [
+        "(comment) @comment",
+        "(string) @string",
+        "(integer) @number",
+        "(float) @number",
+        "[(true) (false) (none)] @constant",
+    ]
+    if keywords_literal:
+        query_parts.append(f"[{keywords_literal}] @keyword")
+
+    query_parts.extend(
+        [
+            '(decorator "@" @decorator)',
+            "(decorator (identifier) @decorator)",
+            "(decorator (attribute attribute: (identifier) @decorator))",
+            '((identifier) @variable_builtin (#any-of? @variable_builtin "self" "cls"))',
+            "(class_definition name: (identifier) @class_def)",
+            "(function_definition name: (identifier) @function_def)",
+        ]
+    )
+
+    if builtin_funcs:
+        query_parts.append(
+            f'((call function: (identifier) @builtin_func) (#match? @builtin_func "{funcs_pattern}"))'
+        )
+    if builtin_classes:
+        query_parts.append(
+            f'((identifier) @builtin_class (#match? @builtin_class "{classes_pattern}"))'
+        )
+
+    query_parts.extend(
+        [
+            "(call function: (identifier) @function_call)",
+            "(call function: (attribute attribute: (identifier) @function_call))",
+        ]
+    )
+
+    return Query(PY_LANGUAGE, "\n".join(query_parts))
+
+
+PYTHON_QUERY = _build_python_query()
+
+_TAG_PRIORITY = {
+    "comment": 0,
+    "string": 0,
+    "keyword": 0,
+    "constant": 0,
+    "number": 0,
+    "class_def": 0,
+    "function_def": 0,
+    "variable_builtin": 0,
+    "decorator": 0,
+    "builtin_func": 1,
+    "builtin_class": 2,
+    "function_call": 3,
+}
 
 
 class PyTreeSitterWorker(QtCore.QObject):
@@ -67,11 +118,14 @@ class PyTreeSitterWorker(QtCore.QObject):
         )
         STYLE_DEFAULT = 0
         STYLE_KEYWORD = 1
-        STYLE_STRING = 2
-        STYLE_COMMENTS = 3
-        STYLE_CONSTANTS = 4
-        STYLE_FUNCTION_DEF = 5
-        STYLE_CLASSES = 6
+        STYLE_TYPES = 2
+        STYLE_STRING = 3
+        STYLE_COMMENTS = 4
+        STYLE_CONSTANTS = 5
+        STYLE_FUNCTIONS = 6
+        STYLE_FUNCTION_DEF = 7
+        STYLE_CLASS_DEF = 8
+        STYLE_CLASSES = 9
         try:
             if generation < self.latest_generation:
                 return
@@ -108,17 +162,18 @@ class PyTreeSitterWorker(QtCore.QObject):
 
             node_styles = []
             for tag, nodes in captures.items():
+                priority = _TAG_PRIORITY.get(tag, 9)
                 for node in nodes:
                     if node.start_byte < end_pos and node.end_byte > start_pos:
-                        node_styles.append((node, tag))
+                        node_styles.append((node, tag, priority))
 
-            node_styles.sort(key=lambda x: x[0].start_byte)
+            node_styles.sort(key=lambda x: (x[0].start_byte, x[2]))
 
             runs = array.array("i")
             append = runs.append
 
             last_pos = start_pos
-            for node, tag in node_styles:
+            for node, tag, _ in node_styles:
                 if self._is_cancelled or generation < self.latest_generation:
                     return
 
@@ -141,12 +196,16 @@ class PyTreeSitterWorker(QtCore.QObject):
                 elif tag == "string":
                     style = STYLE_STRING
                 elif tag == "class_def":
+                    style = STYLE_CLASS_DEF
+                elif tag == "builtin_class":
                     style = STYLE_CLASSES
                 elif tag == "function_def":
                     style = STYLE_FUNCTION_DEF
-                elif tag == "keyword":
+                elif tag in ("function_call", "builtin_func", "decorator"):
+                    style = STYLE_FUNCTIONS
+                elif tag in ("keyword", "variable_builtin"):
                     style = STYLE_KEYWORD
-                elif tag == "number":
+                elif tag in ("number", "constant"):
                     style = STYLE_CONSTANTS
 
                 append(end - start)
