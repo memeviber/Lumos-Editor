@@ -58,7 +58,7 @@ Whether you're editing source code, managing a project, or extending the editor 
 - **RunX File Runner:** Run supported files in the integrated terminal or open HTML documents in your default browser.
 - **Media Viewer:** Open common image, audio, and video formats directly in the editor.
 
-AI Chat is available in a resizable panel on the right. Configure multiple named AI profiles with a model and API endpoint; API keys are stored in the operating system's credential store, not in Lumos's JSON settings. Source Control is available from the **GIT** tab in the left panel. Its **AI Commit** action asks before sending the staged diff to the selected provider, then generates a message for review before committing.
+AI Chat is available in a resizable panel on the right. Configure multiple named AI profiles with a model and API endpoint; API keys are stored in the operating system's credential store, not in Lumos's JSON settings. **API key storage requirement:** Lumos needs a supported operating-system keyring to save and retrieve API keys. If your system does not provide one, AI Chat cannot use profiles that require an API key; the rest of the editor remains available. Source Control is available from the **GIT** tab in the left panel. Its **AI Commit** action asks before sending the staged diff to the selected provider, then generates a message for review before committing.
 
 ### Customization and Extensibility
 
@@ -97,6 +97,7 @@ The trade-off is that Lumos must maintain these window behaviors itself. In part
 
 - Python 3.x
 - Windows or Linux
+- Git installed and available on `PATH` (required to run Lumos Editor)
 - The dependencies listed in `requirements.txt`
 
 The minimum supported Python version has not been specified. If you encounter compatibility issues, verify that your Python version is supported by the project's dependencies.
