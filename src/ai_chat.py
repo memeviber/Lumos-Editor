@@ -397,6 +397,18 @@ class AIProfileDialog(ThemedBaseDialog):
             )
             return
         profile_id = self.profile_combo.currentData() or uuid.uuid4().hex
+        normalized_name = name.casefold()
+        if any(
+            profile.get("id") != profile_id
+            and profile.get("name", "").strip().casefold() == normalized_name
+            for profile in self.profiles
+        ):
+            QMessageBox.warning(
+                self,
+                "Duplicate AI Profile Name",
+                "A profile with this name already exists. Choose a different name.",
+            )
+            return
         profile = {
             "id": profile_id,
             "name": name,
