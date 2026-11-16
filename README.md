@@ -60,7 +60,7 @@ Use Lumos to edit code, manage projects, run files, and extend the editor with p
 - **Source Control:** Manage Git repositories in the editor.
 - **Integrated terminal:** Run shell commands without leaving the editor.
 - **AI Chat:** Get coding assistance with OpenAI and OpenAI-compatible APIs.
-- **RunX:** Run supported files in the integrated terminal or open HTML files in your browser. Shortcuts: `Alt+R` to run the current file, `Ctrl+Alt+R` to enter arguments.
+- **RunX:** Run supported files in the integrated terminal or open HTML files in your browser.
 - **Media viewer:** Open common image, audio, and video formats.
 
 ### Customization
@@ -484,7 +484,7 @@ The following shortcuts are documented for Lumos Editor.
 |---|---|
 | `Ctrl+B` | Toggle Explorer Panel |
 | `Ctrl+P` | Toggle Markdown Preview |
-| `` Ctrl+` `` | Toggle Integrated Terminal |
+| <code>Ctrl+`</code>  | Toggle Integrated Terminal |
 
 **Terminal tip:** Press the Right Arrow key to accept the available auto-completion suggestion.
 
