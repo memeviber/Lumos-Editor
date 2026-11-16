@@ -30,8 +30,6 @@ Lumos Editor is a desktop code editor designed to bring essential development to
 
 Use Lumos to edit code, manage projects, run files, and extend the editor with plugins.
 
-> **RunX quick start:** Enable the RunX plugin, open and save a file, then press `Alt+R` to run it. Press `Ctrl+Alt+R` to enter command-line arguments. RunX must be configured for the file type.
-
 ## Contents
 
 - [Features](#features)
@@ -197,6 +195,8 @@ Pygments may be slower on files larger than approximately 2,500 lines of code (L
 This threshold is a practical guideline rather than a universal performance limit. Actual performance depends on file structure, hardware, and other factors.
 
 ## RunX — File Runner Plugin
+
+> **RunX quick start:** Enable the RunX plugin, open and save a file, then press `Alt+R` to run it. Press `Ctrl+Alt+R` to enter command-line arguments. RunX must be configured for the file type.
 
 RunX is a lightweight, cross-platform file runner plugin for Lumos Editor.
 
