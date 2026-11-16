@@ -28,7 +28,54 @@
 
 Lumos Editor is a desktop code editor designed to bring essential development tools into a single, customizable workspace. Built with Python and PyQt5, it combines syntax highlighting, project navigation, Git integration, an integrated terminal, Markdown preview, and a flexible plugin system.
 
-Whether you're editing source code, managing a project, or extending the editor with your own plugins, Lumos provides a foundation you can adapt to your workflow.
+Use Lumos to edit code, manage projects, run files, and extend the editor with plugins.
+
+> **RunX quick start:** Enable the RunX plugin, open and save a file, then press `Alt+R` to run it. Press `Ctrl+Alt+R` to enter command-line arguments. RunX must be configured for the file type.
+
+## Contents
+
+- [Features](#features)
+- [Screenshots](#screenshots)
+- [Supported Platforms](#supported-platforms)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [RunX File Runner](#runx-file-runner-plugin)
+- [Plugin System](#plugin-system)
+- [Keyboard Shortcuts](#keyboard-shortcuts)
+- [Troubleshooting](#troubleshooting)
+- [Contributing](#contributing)
+- [Credits](#credits)
+- [License](#license)
+
+## Features
+
+### Editing
+
+- **Syntax highlighting:** Support for built-in and custom language lexers.
+- **File explorer:** Browse projects and manage files, including through drag and drop.
+- **Multi-tab editing:** Open, move, and close multiple file tabs.
+- **Search and replace:** Search in the current file or across a project.
+- **Markdown preview:** Preview Markdown with embedded images and highlighted code.
+
+### Development
+
+- **Source Control:** Manage Git repositories in the editor.
+- **Integrated terminal:** Run shell commands without leaving the editor.
+- **AI Chat:** Get coding assistance with OpenAI and OpenAI-compatible APIs.
+- **RunX:** Run supported files in the integrated terminal or open HTML files in your browser. Shortcuts: `Alt+R` to run the current file, `Ctrl+Alt+R` to enter arguments.
+- **Media viewer:** Open common image, audio, and video formats.
+
+### Customization
+
+- **Themes:** Use built-in themes or create custom color schemes.
+- **Plugins:** Add language support, menu actions, and event hooks.
+- **PyFlex lexer:** Improve editing responsiveness, especially in large Python files.
+
+### AI Chat and Source Control
+
+AI Chat is available in the resizable panel on the right. Create named profiles with a model and API endpoint. API keys are saved in the operating system's credential store, not in Lumos settings. **A supported OS keyring is required for AI profiles that use an API key.** If the system does not provide one, those profiles cannot save or retrieve their key; other editor features remain available.
+
+Source Control is available from the **GIT** tab in the left panel. **AI Commit** asks before sending the staged diff to the selected provider, then generates a commit message for review before committing.
 
 ## Screenshots
 
@@ -40,32 +87,6 @@ Whether you're editing source code, managing a project, or extending the editor 
   <img src="./imgs/screenshot2.png" alt="Lumos Editor workspace" width="800">
 </p>
 
-## Features
-
-### Editing and Navigation
-
-- **Syntax Highlighting:** Syntax highlighting with support for custom language lexers.
-- **Advanced File Explorer:** Browse projects and create, rename, delete, copy, cut, paste, or move files through drag-and-drop operations.
-- **Multi-Tab Editing:** Open multiple files simultaneously with movable and closable tabs.
-- **Search and Replace:** Find and replace text within the current file or across the entire project.
-- **Markdown Preview:** Preview Markdown documents, including embedded images and syntax-highlighted code blocks.
-
-### Development Tools
-
-- **Source Control Integration:** Manage Git repositories through a dedicated source control panel.
-- **Integrated Terminal:** Execute shell commands without leaving the editor.
-- **AI Chat Assistant:** Get coding assistance, generate code, and ask programming questions through an integrated chat panel that supports OpenAI and OpenAI-compatible APIs.
-- **RunX File Runner:** Run supported files in the integrated terminal or open HTML documents in your default browser.
-- **Media Viewer:** Open common image, audio, and video formats directly in the editor.
-
-AI Chat is available in a resizable panel on the right. Configure multiple named AI profiles with a model and API endpoint; API keys are stored in the operating system's credential store, not in Lumos's JSON settings. **API key storage requirement:** Lumos needs a supported operating-system keyring to save and retrieve API keys. If your system does not provide one, AI Chat cannot use profiles that require an API key; the rest of the editor remains available. Source Control is available from the **GIT** tab in the left panel. Its **AI Commit** action asks before sending the staged diff to the selected provider, then generates a message for review before committing.
-
-### Customization and Extensibility
-
-- **Plugin System:** Extend editor functionality with custom language lexers, menu actions, and event hooks.
-- **Custom Themes:** Choose from built-in themes or create your own color schemes using JSON files.
-- **PyFlex Lexer:** Use the default fast Python lexer for a more responsive editing experience, particularly when working with large Python files.
-
 ## Supported Platforms
 
 Lumos Editor currently supports:
@@ -75,15 +96,15 @@ Lumos Editor currently supports:
 
 macOS has not been tested or optimized and is not officially supported. Some features may not work as expected.
 
-### Interactive Window Resizing
+### Window Controls
 
-Drag any window edge or corner to resize it; the mouse cursor indicates the resize direction. You can also use the size grip in the bottom-right corner of the status bar.
+Drag a window edge or corner to resize it; the cursor indicates the resize direction. You can also use the size grip in the status bar's bottom-right corner.
 
-While the window is being resized or changing size through snap/maximize shortcuts, the editor temporarily pauses content rendering and displays an overlay. During a drag, the overlay hides the border and drop shadow; when snapping to half the screen, the border remains square and the shadow stays hidden. The full interface is rendered again when the transition ends. This avoids border, shadow, and menu-bar flicker.
+While resizing or using snap/maximize shortcuts, Lumos temporarily pauses content rendering and displays an overlay. This avoids border, shadow, and menu-bar flicker during the transition.
 
-The menu bar is normally hidden behind the arrow icon in the top-right corner of the title bar.
+The menu bar is behind the arrow button in the title bar's top-right corner.
 
-Use **Alt + Left/Right Arrow** to place the editor on either half of the active monitor, **Alt + Up Arrow** to maximize, and **Alt + Down Arrow** to restore it. Windows reserves the **Windows + Arrow** shortcuts for native window snapping, which is not supported by this custom frameless window.
+Use `Alt+Left` or `Alt+Right` to snap the editor to either half of the active monitor, `Alt+Up` to maximize, and `Alt+Down` to restore. The custom window does not support Windows' native `Windows+Arrow` snapping shortcuts.
 
 ### Why Lumos Uses a Custom Frameless Window
 
@@ -230,6 +251,10 @@ Plugins can be enabled, disabled, and managed through the **Plugins** menu.
 > Plugins execute with the same permissions as the editor itself. A malicious plugin may read, modify, or delete files accessible to the current user, execute commands, or access other resources.
 >
 > Only install plugins from sources you trust. Lumos Editor does not guarantee the safety or integrity of third-party plugins.
+
+### Installing a Custom Plugin
+
+To install a plugin, place its `.lmp` package in the `plugins/` directory in the Lumos application folder, restart Lumos, then enable or manage it from the **Plugins** menu. Lumos scans this directory at startup and recognizes `.lmp` packages; loose Python files and unpacked plugin folders are not loaded automatically.
 
 ### Plugin Package Format
 
@@ -476,6 +501,8 @@ The following shortcuts are documented for Lumos Editor.
 |---|---|
 | `Ctrl+Shift+B` | Enable or Disable Plugins |
 | `Ctrl+Shift+M` | Manage Individual Plugins |
+
+When the RunX plugin is enabled, it also provides `Alt+R` to run the current file and `Ctrl+Alt+R` to run it with command-line arguments.
 
 ### Command Palette
 
